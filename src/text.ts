@@ -36,6 +36,6 @@ function fizzbuzzEnd() {
     }.toString();
 }
 
-export function create(): [string, string] {
+export default function create(): [string, string] {
     return [fizzbuzzStart(), fizzbuzzEnd()];
 };

@@ -17,7 +17,9 @@ export default class Game {
     }
 
     private createGame() {
-
+        const gameText = createText();
+        this.startText = gameText[0];
+        this.goalText = gameText[1];
     }
 }
 
