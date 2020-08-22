@@ -1,19 +1,19 @@
 import * as net from "net";
+import Game, { Difficulty } from "./game";
 
-let connectionId = 1;
+let currentGame: Game = null;
+
 const server = net.createServer((c) => {
-    let connected = 0;
-    let connectionMsgCount = 1;
-    const id = connectionId++;
+    if (game === null) {
+        game = new Game()
+    }
 
-    console.log('client connected');
     c.on('end', () => {
         connected = 2;
         console.log("Ended", id);
     });
 
     c.on("data", (data: Buffer) => {
-        console.log(id, "Received data", data.toString());
         connected = 1;
     });
 

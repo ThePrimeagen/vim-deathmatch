@@ -5,6 +5,15 @@ export enum State {
     WaitingForType,
     WaitingForData,
 }
+/*
+ * The Protocol
+   "length:type:<msg of length: l>"
+*/
+
+export function createMessage(type: string, message: string | object): string {
+    message = typeof message === "string" ? message : JSON.stringify(message);
+    return `${message.length}:${type}:${message}`;
+}
 
 export default class HandleMsg {
     public tmpMessage = "";
@@ -12,26 +21,59 @@ export default class HandleMsg {
     public msgLength = 0;
     public state: State = State.WaitingForLength;
 
-    constructor() { }
-
     parse(data: string): [boolean, string, string] {
         let completed = false;
         let msg = "";
 
         let currentIdx = 0;
-        if (this.state === State.WaitingForLength) {
-            const [
-                found,
-                consumed,
-                parsedString,
-            ] = this.readToToken(data, currentIdx, ":");
+        do {
+            if (this.state === State.WaitingForLength) {
+                const [
+                    found,
+                    consumed,
+                    parsedString,
+                ] = this.readToToken(data, currentIdx, ":");
 
-            currentIdx += consumed;
+                currentIdx += consumed;
 
-            // TODO: Finish the length, type, and msg parsing.
-            if (found) {
+                if (found) {
+                    this.msgLength = +parsedString;
+                    this.state = State.WaitingForType;
+                }
             }
-        }
+
+            if (this.state === State.WaitingForType) {
+                const [
+                    found,
+                    consumed,
+                    parsedString,
+                ] = this.readToToken(data, currentIdx, ":");
+
+                currentIdx += consumed;
+
+                if (found) {
+                    this.msgType = parsedString;
+                    this.state = State.WaitingForData;
+                }
+            }
+
+            if (this.state === State.WaitingForData) {
+                const [
+                    found,
+                    consumed,
+                    parsedString,
+                ] = this.readToLength(data, currentIdx, this.msgLength);
+
+                currentIdx += consumed;
+
+                if (found) {
+                    this.state = State.WaitingForLength;
+                    msg = parsedString;
+                    completed = true;
+                }
+            }
+
+        } while (currentIdx < data.length);
 
         return [
             completed,
@@ -45,7 +87,7 @@ export default class HandleMsg {
         let consumed = 0;
         let parsedString = "";
 
-        const idx = msg.indexOf(msg, offset);
+        const idx = msg.indexOf(token, offset);
 
         if (idx === -1) {
             this.store(msg.substr(offset));
@@ -54,7 +96,7 @@ export default class HandleMsg {
         else {
             parsedString = this.get() + msg.substring(offset, idx);
             completed = true;
-            consumed = idx - offset;
+            consumed = idx - offset + 1;
         }
 
         return [

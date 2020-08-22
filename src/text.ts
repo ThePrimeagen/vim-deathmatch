@@ -1,5 +1,5 @@
 function fizzbuzzStart() {
-    return function fizzbuzz(dataMap, count) {
+    return `function fizzbuzz(dataMap, count) {
         for (let i = 0; i < count; ++i) {
             let str = "";
             for (const k in dataMap.keys()) {
@@ -13,11 +13,11 @@ function fizzbuzzStart() {
                 console(str);
             }
         }
-    }.toString();
+    }`;
 }
 
 function fizzbuzzEnd() {
-    return function fizzbuzz(dataMap, count) {
+    return `function fizzbuzz(dataMap, count) {
         for (let i = 0; i < count; ++i) {
             let str = "";
             for (const [k, v] of Object.entries(dataMap)) {
@@ -33,7 +33,7 @@ function fizzbuzzEnd() {
                 console.log(i);
             }
         }
-    }.toString();
+    }`;
 }
 
 export default function create(): [string, string] {
