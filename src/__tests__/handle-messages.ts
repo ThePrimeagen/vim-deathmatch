@@ -7,11 +7,11 @@ describe("HandleMsg", function() {
         expect(handle.state).toEqual(State.WaitingForLength);
         handle.parse(`0:ready`);
         expect(handle.state).toEqual(State.WaitingForType);
-        const [
+        const {
             completed,
             type,
-            dat,
-        ] = handle.parse(`:`);
+            message: dat,
+        } = handle.parse(`:`);
 
         expect(handle.state).toEqual(State.WaitingForLength);
         expect(completed).toEqual(true);
@@ -28,11 +28,11 @@ describe("HandleMsg", function() {
         expect(handle.state).toEqual(State.WaitingForType);
         handle.parse(`:`);
         expect(handle.state).toEqual(State.WaitingForData);
-        const [
+        const {
             completed,
             type,
-            dat,
-        ] = handle.parse(msg);
+            message: dat,
+        } = handle.parse(msg);
 
         expect(completed).toEqual(true);
         expect(type).toEqual("onteuh");

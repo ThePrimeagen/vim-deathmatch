@@ -1,139 +1,25 @@
-import Game, { Stats, PlayerStats, Difficulty } from "../game";
+import { incrementTime, reset } from "./mock-date-now";
+
+import Game, { Difficulty, WinningMessage } from "../game";
+import { keyStrokeScore, timeTakenMSScore } from "../score";
+import HandleMsg from "../handle-messages";
 import { createMessage } from "../handle-messages";
+import MockSocket from "./mock-socket";
 
 jest.useFakeTimers();
 
-let dateNowTime = 0;
-
-const boundDate = Date.now.bind(Date);
-function getNow() {
-    return dateNowTime;
-}
-
-beforeEach(() => {
-    dateNowTime = 0;
-
-    // @ts-ignore
-    Date.now = getNow;
+beforeEach(function() {
+    jest.clearAllMocks();
 });
 
-afterEach(() => {
-    Date.now = boundDate;
-});
+describe("Game", function() {
+    beforeEach(() => reset());
 
-describe("PlayerStats", function() {
-    it("should fail with bad data.", function() {
-        const stats = new PlayerStats(JSON.stringify({
-            foo: "bar"
-        }));
-
-        const stats2 = new PlayerStats(JSON.stringify({
-            keys: "bar",
-            undoCount: 0,
-        }));
-
-        const stats3 = new PlayerStats(JSON.stringify({
-            keys: [0],
-            undoCount: 0,
-        }));
-
-        const stats4 = new PlayerStats(JSON.stringify({
-            keys: [0],
-        }));
-
-        expect(stats.failed).toEqual(true);
-        expect(stats2.failed).toEqual(true);
-        expect(stats3.failed).toEqual(true);
-        expect(stats4.failed).toEqual(true);
-    });
-
-    it("should set the datas", function() {
-        const stats = new PlayerStats(JSON.stringify({
-            keys: ["i"],
-            undoCount: 0
-        }));
-
-        expect(stats.failed).toEqual(false);
-    });
-
-});
-
-describe("Stats", function() {
-    it("Stats should properly calculate maximum time", function() {
-        const stats = new Stats();
-        const arrayOfKeys = ["s", "h", "u", "t", "u", "p"];
-        const timeWaited = 1000;
-
-        stats.start();
-        dateNowTime += 1000;
-        jest.advanceTimersByTime(timeWaited);
-
-        const playerStats = new PlayerStats(JSON.stringify({
-            keys: arrayOfKeys,
-            undoCount: 0
-        }));
-
-        expect(playerStats.failed).toEqual(false);
-
-        stats.calculateScore(playerStats);
-
-        expect(stats.score).toEqual(timeWaited + arrayOfKeys.length * 50);
-    });
-
-    it("should ensure that maximum time is correct", function() {
-        const stats = new Stats();
-        const stats2 = new Stats();
-        const arrayOfKeys = ["s", "h", "u", "t", "u", "p"];
-        const timeWaited = 1000;
-
-        stats.start();
-        dateNowTime += 500;
-        stats2.start();
-        dateNowTime += 500;
-        jest.advanceTimersByTime(timeWaited);
-
-        const playerStats = new PlayerStats(JSON.stringify({
-            keys: arrayOfKeys,
-            undoCount: 0
-        }));
-
-        expect(playerStats.failed).toEqual(false);
-
-        stats.calculateScore(playerStats);
-
-        expect(stats2.maximumTimeLeft(stats)).toEqual(500 + arrayOfKeys.length * 50);
-    });
-});
-
-type Callback = (...args: any) => void;
-class MockSocket {
-    public callbacks: {[key: string]: Callback} = {};
-    public writes: any[] = [];
-    public ended: boolean = false;
-
-    on(key: string, cb: Callback) {
-        this.callbacks[key] = cb;
-    }
-
-    write(data: any, cb?: (e?: Error) => void) {
-        if (this.ended) {
-            throw new Error("NO CALLING ME");
-        }
-        this.writes.push(data);
-
-        // Probably have to mock this out
-        cb();
-    }
-
-    end() {
-        this.ended = true;
-    }
-}
-
-describe.only("Game", function() {
-
-    function createGame(): [Game, MockSocket, MockSocket] {
+    function createGame(logEmits: boolean = false): [MockSocket, MockSocket, Game] {
         const game = new Game(Difficulty.easy, "foo", "bar");
+        if (logEmits) {
+            consoleLogEmits(game);
+        }
 
         const p1 = new MockSocket();
         const p2 = new MockSocket();
@@ -144,16 +30,15 @@ describe.only("Game", function() {
         //@ts-ignore
         game.addPlayer(p2);
 
-        return [game, p1, p2];
+        return [p1, p2, game];
     }
 
-    function writeMessage(p: MockSocket, type: string, message: string | object) {
-        p.callbacks["data"](Buffer.from(createMessage(type, message)));
+    async function writeMessage(p: MockSocket, type: string, message: string | object) {
+        await p.callbacks["data"](Buffer.from(createMessage(type, message)));
     }
 
-    function readyPlayers(p1: MockSocket, p2: MockSocket) {
-        writeMessage(p1, "ready", "");
-        writeMessage(p2, "ready", "");
+    function readyPlayers(...args: MockSocket[]) {
+        args.forEach(p => writeMessage(p, "ready", ""));
     }
 
     function flushMessages(p1: MockSocket, p2: MockSocket) {
@@ -161,8 +46,12 @@ describe.only("Game", function() {
         p2.writes.length = 0;
     }
 
+    function consoleLogEmits(game: Game) {
+        game.on("info", console.log);
+    }
+
     it("should get two players and send the map down", function() {
-        const [ _, p1, p2 ] = createGame();
+        const [ p1, p2 ] = createGame();
 
         expect(p1.writes.length).toEqual(0);
         expect(p2.writes.length).toEqual(0);
@@ -188,16 +77,159 @@ describe.only("Game", function() {
         }));
     });
 
-    it("When one player finishes, the other player should be forced quit in a specific amount of time.", function() {
-        const [ game, p1, p2 ] = createGame();
+    it("When one player finishes, the other player should be forced quit in a specific amount of time.", async function() {
+
+        const [ p1, p2 ] = createGame(true);
+        const parser = new HandleMsg();
+
         readyPlayers(p1, p2);
+        expect(setTimeout).toHaveBeenCalledTimes(1);
         flushMessages(p1, p2);
 
-        dateNowTime = 1000;
+        incrementTime(1000);
+        const keysPressed = ["a", "b", "c"];
+        await writeMessage(p1, "finished", {
+            keys: keysPressed,
+            undoCount: 0,
+        });
 
-        writeMessage(p1, "finished", {
+        expect(p1.writes.length).toEqual(1);
+        expect(p2.writes.length).toEqual(0);
+
+        const waitingMsg = parser.parse(p1.writes[0]);
+        expect(waitingMsg.completed).toEqual(true);
+        expect(waitingMsg.type).toEqual("waiting");
+
+        flushMessages(p1, p2);
+
+        jest.advanceTimersByTime(30000);
+
+        expect(p1.writes.length).toEqual(1);
+        expect(p2.writes.length).toEqual(1);
+
+        const finished1 = parser.parse(p1.writes[0]);
+        const finished2 = parser.parse(p2.writes[0]);
+
+        expect(finished1.completed).toEqual(true);
+        expect(finished2.completed).toEqual(true);
+        expect(finished1.type).toEqual("finished");
+        expect(finished2.type).toEqual("finished");
+
+        const m1: WinningMessage = JSON.parse(finished1.message);
+        const m2: WinningMessage = JSON.parse(finished2.message);
+
+        expect(m1.winner).toEqual(true);
+        expect(m2.winner).toEqual(false);
+        expect(m1.expired).toEqual(false);
+        expect(m2.expired).toEqual(true);
+        expect(m1.scoreDifference).toEqual(timeTakenMSScore(1000) + keyStrokeScore(keysPressed));
+    });
+
+    it("Both players will finish, p2 should win due to strokes", async function() {
+
+        const [ p1, p2 ] = createGame(true);
+        const parser = new HandleMsg();
+
+        readyPlayers(p1, p2);
+        expect(setTimeout).toHaveBeenCalledTimes(1);
+        flushMessages(p1, p2);
+        incrementTime(1000);
+
+        await writeMessage(p1, "finished", {
             keys: ["a", "b", "c"],
             undoCount: 0,
         });
+
+        flushMessages(p1, p2);
+
+        incrementTime(999);
+        await writeMessage(p2, "finished", {
+            keys: ["a", "b"],
+            undoCount: 0,
+        });
+
+        expect(p1.writes.length).toEqual(1);
+        expect(p2.writes.length).toEqual(1);
+
+        const finished1 = parser.parse(p1.writes[0]);
+        const finished2 = parser.parse(p2.writes[0]);
+
+        expect(finished1.completed).toEqual(true);
+        expect(finished2.completed).toEqual(true);
+        expect(finished1.type).toEqual("finished");
+        expect(finished2.type).toEqual("finished");
+
+        const m1: WinningMessage = JSON.parse(finished1.message);
+        const m2: WinningMessage = JSON.parse(finished2.message);
+
+        expect(m1.winner).toEqual(false);
+        expect(m2.winner).toEqual(true);
+        expect(m1.expired).toEqual(false);
+        expect(m2.expired).toEqual(false);
+
+        //expect(m1.scoreDifference).toEqual(1);
+    });
+
+    it("Both players do nothing, blue balls situation.", async function() {
+
+        const [ p1, p2 ] = createGame(true);
+        const parser = new HandleMsg();
+
+        readyPlayers(p1, p2);
+        expect(setTimeout).toHaveBeenCalledTimes(1);
+        flushMessages(p1, p2);
+
+        expect(p1.writes.length).toEqual(0);
+        expect(p2.writes.length).toEqual(0);
+
+        jest.advanceTimersByTime(30000);
+
+        expect(p1.writes.length).toEqual(1);
+        expect(p2.writes.length).toEqual(1);
+
+        const finished1 = parser.parse(p1.writes[0]);
+        const finished2 = parser.parse(p2.writes[0]);
+
+        expect(finished1.completed).toEqual(true);
+        expect(finished2.completed).toEqual(true);
+        expect(finished1.type).toEqual("finished");
+        expect(finished2.type).toEqual("finished");
+
+        const m1: WinningMessage = JSON.parse(finished1.message);
+        const m2: WinningMessage = JSON.parse(finished2.message);
+
+        expect(m1.winner).toEqual(false);
+        expect(m2.winner).toEqual(false);
+        expect(m1.expired).toEqual(true);
+        expect(m2.expired).toEqual(true);
+    });
+
+    it.only("Player 1 is not able to sent the ready command.", async function() {
+
+        const [ p1, p2 ] = createGame(true);
+        const parser = new HandleMsg();
+
+        readyPlayers(p2);
+
+        jest.advanceTimersByTime(30000);
+
+        expect(p1.writes.length).toEqual(1);
+        expect(p2.writes.length).toEqual(1);
+
+        const finished1 = parser.parse(p1.writes[0]);
+        const finished2 = parser.parse(p2.writes[0]);
+
+        expect(finished1.completed).toEqual(true);
+        expect(finished2.completed).toEqual(true);
+        expect(finished1.type).toEqual("finished");
+        expect(finished2.type).toEqual("finished");
+
+        const m1: WinningMessage = JSON.parse(finished1.message);
+        const m2: WinningMessage = JSON.parse(finished2.message);
+
+        expect(m1.winner).toEqual(false);
+        expect(m2.winner).toEqual(true);
+        expect(m1.expired).toEqual(true);
+        expect(m2.expired).toEqual(true);
     });
 });

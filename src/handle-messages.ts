@@ -15,13 +15,19 @@ export function createMessage(type: string, message: string | object): string {
     return `${message.length}:${type}:${message}`;
 }
 
+export type ParsedMessage = {
+    completed: boolean;
+    type: string;
+    message: string;
+}
+
 export default class HandleMsg {
     public tmpMessage = "";
     public msgType = "";
     public msgLength = 0;
     public state: State = State.WaitingForLength;
 
-    parse(data: string): [boolean, string, string] {
+    parse(data: string): ParsedMessage {
         let completed = false;
         let msg = "";
 
@@ -75,11 +81,11 @@ export default class HandleMsg {
 
         } while (currentIdx < data.length);
 
-        return [
+        return {
             completed,
-            this.msgType,
-            msg
-        ];
+            type: this.msgType,
+            message: msg
+        };
     }
 
     private readToToken(msg: string, offset: number, token: string): ParseReturn {

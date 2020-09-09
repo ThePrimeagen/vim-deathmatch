@@ -40,6 +40,9 @@ And await the greatest editing experience of your life.
   - Server logs should be able to play both players
   - Should be able to search through logs via uuids (player identifications).
 - Random puzzle generator (typescript).
+
+#### TODO If I really feel like it...
+
 - Should we create a website for this?
   - How do we link players to their uuid?
   - public uuid vs private? That way a public uuid can show stats and not leak
