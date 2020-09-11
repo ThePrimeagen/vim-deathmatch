@@ -7,6 +7,7 @@ const READY_COMMAND_TIMEOUT = 30000;
 const NO_READY_COMMAND_MSG = `Did not receive a ready command within ${READY_COMMAND_TIMEOUT / 1000} seconds of connection.`;
 const START_COMMAND_ACCEPT_TIMEOUT = 30000;
 const START_COMMAND_ACCEPT_MSG = `Was unable to send a start game command.`;
+const GAME_FAILED_TO_START = "The game has failed to start due to the other player";
 
 // ReturnType<typeof setTimeout>
 
@@ -17,6 +18,7 @@ export enum Difficulty {
 };
 
 export type WinningMessage = {
+    failed: boolean;
     winner: boolean;
     expired: boolean;
     scoreDifference: number;
@@ -161,7 +163,7 @@ export default class Game {
             this.p2 : this.p1;
     }
 
-    private onConnectionEnded(player: Player) {
+    private async onConnectionEnded(player: Player) {
         this.emit("info", "onConnectionEnded", player.toObj());
         if (player.disconnected === true) {
             return;
@@ -169,7 +171,7 @@ export default class Game {
 
         player.disconnected = true;
         if (!player.finished) {
-            this.endGame(true);
+            await this.endGame(true);
         }
     }
 
@@ -232,14 +234,15 @@ export default class Game {
                 this.emit("info", "processMessage#finished", player.toObj, type, msg);
                 this.emit("error", "processMessage#finished", player.toObj, type, msg);
                 player.failed;
-                this.endGame();
+                await this.endGame();
             }
             else {
                 player.stats.calculateScore(stats);
                 player.finished = true;
-                this.emit("info", "processMessage#finished -- calculateScore", stats);
+                const gameEnded = await this.endGame();
+                this.emit("info", "processMessage#finished -- calculateScore", gameEnded, stats);
 
-                if (!this.endGame()) {
+                if (!gameEnded) {
                     await player.send("waiting", "Waiting for other player to finish...");
                 }
             }
@@ -293,14 +296,22 @@ export default class Game {
         });
     }
 
-    private sendFatalMessage(player: Player) {
+    private async sendFatalMessage(player: Player): Promise<void> {
+        await player.send("finished", {
+            failed: player.failed,
+            winner: false,
+            msg: player.failed ? player.failureMessage : GAME_FAILED_TO_START
+        });
     }
 
     private async fatalEnding(): Promise<void> {
-        throw new Error("Not Implemented you bafoon.");
         this.emit("info", "fatalEnding", this.p1.failed, this.p2.failed);
 
-        if (this.p1.failed)
+        const msgs: Promise<void>[] = [];
+        msgs.push(this.sendFatalMessage(this.p1));
+        msgs.push(this.sendFatalMessage(this.p2));
+
+        await Promise.all(msgs);
     }
 
     private async sendAndDisconnect(player: Player, message: string | object) {
@@ -359,6 +370,7 @@ export default class Game {
         this.emit("info", "endGame Winner and Loser", winner.id, loser.id);
 
         const score: WinningMessage = {
+            failed: false,
             winner: true,
             expired: false,
             scoreDifference: winner.stats.score - loser.stats.score,
