@@ -53,10 +53,24 @@ end
 function Game:_onMessage(msgType, data)
     self:_writeBuffer(self.bufh[2], data)
 
+    local msg = vim.fn.json_decode(data)
+
     if msgType == "gameStart" then
-        local msg = vim.fn.json_decode(data)
+        self:_clearBuffer(self.bufh[1])
+        self:_clearBuffer(self.bufh[2])
+
         self:_writeBuffer(self.bufh[1], msg.startingText)
         self:_writeBuffer(self.bufh[2], msg.goalText)
+    elseif msgType == "finished" then
+        self:_clearBuffer(self.bufh[1])
+        self:_clearBuffer(self.bufh[2])
+
+        if msg.failed then
+            print("FAILED")
+            self:_writeBuffer(self.bufh[1], msg.message)
+        else
+            print("NOT FAILED")
+        end
     end
 end
 
@@ -108,7 +122,7 @@ function Game:_createOrResizeWindow()
     end
 end
 
-function Game:_writeBuffer(bufh, msg, start)
+function Game:_writeBuffer(bufh)
     start = start or 1
     if not self.bufh then
         return
@@ -118,7 +132,11 @@ function Game:_writeBuffer(bufh, msg, start)
         msg = {msg}
     end
 
-    vim.api.nvim_buf_set_lines(bufh, start, #msg + start, false, msg)
+    vim.api.nvim_buf_set_lines(bufh, start, #msg + start, true, msg)
+end
+
+function Game:_clearBuffer(bufh)
+    vim.cmd("%d")
 end
 
 return Game

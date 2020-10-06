@@ -30,6 +30,7 @@ local default_config = {
         { name = "trace", hl = "Comment", },
         { name = "debug", hl = "Comment", },
         { name = "info",  hl = "None", },
+        { name = "inspect",  hl = "None", },
         { name = "warn",  hl = "WarningMsg", },
         { name = "error", hl = "ErrorMsg", },
         { name = "fatal", hl = "ErrorMsg", },

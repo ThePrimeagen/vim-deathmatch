@@ -2,10 +2,11 @@ import * as net from "net";
 
 import HandleMsg, { createMessage } from "./handle-messages";
 import { PlayerStats, Stats } from "./score";
+import { Logger, getNewId } from "./logger";
 
-const READY_COMMAND_TIMEOUT = 30000;
+export const READY_COMMAND_TIMEOUT = 5000;
 const NO_READY_COMMAND_MSG = `Did not receive a ready command within ${READY_COMMAND_TIMEOUT / 1000} seconds of connection.`;
-const START_COMMAND_ACCEPT_TIMEOUT = 30000;
+export const START_COMMAND_ACCEPT_TIMEOUT = 5000;
 const START_COMMAND_ACCEPT_MSG = `Was unable to send a start game command.`;
 const GAME_FAILED_TO_START = "The game has failed to start due to the other player";
 
@@ -29,7 +30,6 @@ export type WinningMessage = {
 class Player {
     public id: number;
     public conn: net.Socket;
-    public parser: HandleMsg = new HandleMsg();
     public ready: boolean = false;
     public finished: boolean = false;
     public started: boolean = false;
@@ -40,7 +40,7 @@ class Player {
     public stats: Stats;
     public failureMessage: string | null;
 
-    constructor(conn: net.Socket) {
+    constructor(conn: net.Socket, public parser: HandleMsg) {
         this.stats = new Stats();
         this.conn = conn;
         this.failureMessage = null;
@@ -51,6 +51,10 @@ class Player {
     send(type: string, message: string | object): Promise<void> {
         return new Promise((res, rej) => {
             const msg = createMessage(type, message);
+            if (this.conn.destroyed) {
+                return;
+            }
+
             this.conn.write(msg, (e) => {
                 if (e) {
                     rej(e);
@@ -79,18 +83,34 @@ type Callback = (...args: any) => void;
 
 let _gameId = 0;
 
-export default class Game {
+export class Game {
     private p1: Player;
     private p2: Player;
     private timerId: ReturnType<typeof setTimeout>;
     private callbacks: {[key: string]: Callback[]};
     private gameId: number;
+    private logger: Logger;
 
     constructor(private difficulty: Difficulty,
                 private startText: string,
                 private goalText: string) {
 
         this.callbacks = {};
+        this.gameId = getNewId();
+        this.logger = new Logger(() => [this.p1, this.p2], {
+            className: "Game",
+            id: this.gameId,
+        });
+        this.p1 = this.p2 = null;
+        this.logger.info("GameConstructor", difficulty, startText, goalText);
+    }
+
+    toObj() {
+        return {
+            needsPlayers: this.needsPlayers(),
+            isFinished: this.isFinished(),
+            hasFailure: this.hasFailure(),
+        };
     }
 
     getMaximumGameTime() {
@@ -101,18 +121,18 @@ export default class Game {
         const cbs = this.callbacks[type];
         if (cbs) {
             cbs.forEach(cb => {
-                cb("Game", fromFunction, ...args);
+                cb(this.gameId, "Game", fromFunction, ...args);
             });
         }
     }
 
     public needsPlayers(): boolean {
-        this.emit("info", "needsPlayers", !!this.p1, !!this.p2);
+        this.logger.info("needsPlayers");
         return !this.p1 || !this.p2;
     }
 
     public addPlayer(p: net.Socket) {
-        const player = new Player(p);
+        const player = new Player(p, new HandleMsg(this.gameId));
 
         let whichPlayer = 1;
         if (!this.p1) {
@@ -124,11 +144,12 @@ export default class Game {
 
         player.id = whichPlayer;
 
-        this.emit("info", "addPlayer", player);
+        this.logger.info("addPlayer", player);
         this.setPlayerFailureTime(
             player, READY_COMMAND_TIMEOUT, NO_READY_COMMAND_MSG);
 
         p.on("data", (d) => {
+            console.log("DATA", d);
             const {
                 completed,
                 type,
@@ -136,7 +157,7 @@ export default class Game {
             } = player.parser.parse(d.toString());
 
             if (completed) {
-                this.emit("info", "data#completed", player.toObj(), type, message);
+                this.logger.info("data#completed", player.id, type, message);
                 this.processMessage(player, type, message);
             }
         });
@@ -164,7 +185,7 @@ export default class Game {
     }
 
     private async onConnectionEnded(player: Player) {
-        this.emit("info", "onConnectionEnded", player.toObj());
+        this.logger.info("onConnectionEnded", player.id);
         if (player.disconnected === true) {
             return;
         }
@@ -184,13 +205,13 @@ export default class Game {
     private setTimeout() {
         const remaining = this.getMaximumGameTime();
 
-        this.emit("info", "setTimeout", remaining, this.p1.started && this.p2.started);
+        this.logger.info("setTimeout", remaining);
         if (!this.p1.started || !this.p2.started) {
             return;
         }
 
         this.timerId = setTimeout(() => {
-            this.emit("info", "setTimeout#expired", this.p1, this.p2);
+            this.logger.info("setTimeout#expired");
             this.timeoutPlayer(this.p1);
             this.timeoutPlayer(this.p2);
             this.endGame(true);
@@ -198,7 +219,7 @@ export default class Game {
     }
 
     private cancelPlayerFailure(player: Player) {
-        this.emit("info", "cancelPlayerFailure", player);
+        this.logger.info("cancelPlayerFailure", player.id);
         if (player.timerId) {
             clearTimeout(player.timerId);
             player.timerId = null;
@@ -206,7 +227,7 @@ export default class Game {
     }
 
     private setPlayerFailureTime(player: Player, time: number, failureMessage: string) {
-        this.emit("info", "setPlayerFailureTime", player, time);
+        this.logger.info("setPlayerFailureTime", player.id, time);
 
         player.timerId = setTimeout(() => {
             if (!player.started) {
@@ -219,6 +240,7 @@ export default class Game {
     }
 
     private async processMessage(player: Player, type: string, msg: string) {
+        this.logger.info("processMessage", player.id, type, msg);
         if (type === "ready") {
             player.ready = true;
             this.cancelPlayerFailure(player);
@@ -228,11 +250,10 @@ export default class Game {
 
         else if (type === "finished") {
             const stats = new PlayerStats(msg);
-            this.emit("info", "processMessage#finished", stats);
+            this.logger.info("processMessage#finished", stats);
 
             if (stats.failed) {
-                this.emit("info", "processMessage#finished", player.toObj, type, msg);
-                this.emit("error", "processMessage#finished", player.toObj, type, msg);
+                this.logger.info("error", "processMessage#finished", player.id, type, msg);
                 player.failed;
                 await this.endGame();
             }
@@ -240,7 +261,7 @@ export default class Game {
                 player.stats.calculateScore(stats);
                 player.finished = true;
                 const gameEnded = await this.endGame();
-                this.emit("info", "processMessage#finished -- calculateScore", gameEnded, stats);
+                this.logger.info("processMessage#finished -- calculateScore", gameEnded, stats);
 
                 if (!gameEnded) {
                     await player.send("waiting", "Waiting for other player to finish...");
@@ -250,9 +271,9 @@ export default class Game {
     }
 
     private startGame() {
-        this.emit("info", "startGame", this.p1.ready, this.p2.ready);
+        this.logger.info("startGame");
 
-        if (!this.p1.ready || !this.p2.ready) {
+        if (!this.p1.ready || !this.p2 || !this.p2.ready) {
             return;
         }
 
@@ -261,13 +282,13 @@ export default class Game {
             goalText: this.goalText,
         });
 
-        this.emit("info", "startGame", msg);
+        this.logger.info("startGame", msg);
 
         this.setPlayerFailureTime(
             this.p1, START_COMMAND_ACCEPT_TIMEOUT, START_COMMAND_ACCEPT_MSG);
 
         this.p1.conn.write(msg, (e?: Error) => {
-            this.emit("info", "startGame#p1#startGameMessageCallback", e);
+            this.logger.info("startGame#p1#startGameMessageCallback", e);
             if (e || this.p1.failed) {
                 // TODO: Handle this?
                 return;
@@ -283,7 +304,7 @@ export default class Game {
             this.p2, START_COMMAND_ACCEPT_TIMEOUT, START_COMMAND_ACCEPT_MSG);
 
         this.p2.conn.write(msg, (e?: Error) => {
-            this.emit("info", "startGame#p2#startGameMessageCallback", e);
+            this.logger.info("startGame#p2#startGameMessageCallback", e);
             if (e || this.p2.failed) {
                 // TODO: Handle this?
                 return;
@@ -305,11 +326,24 @@ export default class Game {
     }
 
     private async fatalEnding(): Promise<void> {
-        this.emit("info", "fatalEnding", this.p1.failed, this.p2.failed);
+        this.logger.info("fatalEnding");
 
         const msgs: Promise<void>[] = [];
+
+        if (!this.p1) {
+            throw new Error("THIS SHOULD LITERALLY NEVER HAPPEN");
+        }
         msgs.push(this.sendFatalMessage(this.p1));
-        msgs.push(this.sendFatalMessage(this.p2));
+        this.p1 = null;
+
+        if (this.p2) {
+            msgs.push(this.sendFatalMessage(this.p2));
+            this.p2 = null;
+        }
+
+        if (this.timerId) {
+            clearTimeout(this.timerId);
+        }
 
         await Promise.all(msgs);
     }
@@ -319,37 +353,59 @@ export default class Game {
             JSON.stringify(message) : message;
 
         player.conn.write(msg, (e) => {
-            this.emit("info", "endGame", message, e);
+            this.logger.info("endGame", message, e);
             player.disconnected = true;
             player.conn.end();
         });
     }
 
-    private isFinished(): boolean {
-        return (this.p1.finished || this.p1.timedout) &&
-            (this.p2.finished || this.p2.timedout);
+    public hasFailure(): boolean {
+        const p1 = this.p1;
+        const p2 = this.p2;
+
+        this.logger.info("hasFailure");
+
+        if (p1 && p1.failed) {
+            return true;
+        }
+
+        if (p2 && p2.failed) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public isFinished(): boolean {
+        const p1 = this.p1;
+        const p2 = this.p2;
+
+        this.logger.info("isFinished");
+        return p1 && (p1.finished || p1.timedout) &&
+            p2 && (p2.finished || p2.timedout)
     }
 
     private async endGame(force: boolean = false): Promise<boolean> {
 
-        this.emit("info", "endGame",
-                  force, this.isFinished(), this.p1.toObj(), this.p2.toObj());
+        this.logger.info("endGame",
+                  force, this.isFinished());
+
+        if (this.hasFailure()) {
+            this.fatalEnding();
+            return true;
+        }
 
         if (!this.isFinished()) {
-            if (force) {
-                this.fatalEnding();
-                return true;
-            }
             return false;
         }
 
         if (this.timerId) {
-            this.emit("info", "endGame#this.timerId is being cleared");
+            this.logger.info("endGame#this.timerId is being cleared");
             clearTimeout(this.timerId);
         }
 
         if (this.p1.timedout && this.p2.timedout) {
-            this.emit("info", "endGame#timedout");
+            this.logger.info("endGame#timedout");
             const msg = createMessage("finished", {
                 winner: false,
                 expired: true,
@@ -367,7 +423,7 @@ export default class Game {
             this.p1.stats.score > this.p2.stats.score ? this.p1 : this.p2;
         const loser = this.otherPlayer(winner);
 
-        this.emit("info", "endGame Winner and Loser", winner.id, loser.id);
+        this.logger.info("endGame Winner and Loser", winner.id, loser.id);
 
         const score: WinningMessage = {
             failed: false,
@@ -386,7 +442,7 @@ export default class Game {
             winner: false
         });
 
-        this.emit("info", "endGame endingScore", score);
+        this.logger.info("endGame endingScore", score);
         this.sendAndDisconnect(winner, winnerMessage);
         this.sendAndDisconnect(loser, losersMessage);
 
@@ -394,5 +450,7 @@ export default class Game {
     }
 }
 
-
+export function createGame(diff: Difficulty, startText: string, endText: string): Game {
+    return new Game(diff, startText, endText);
+}
 

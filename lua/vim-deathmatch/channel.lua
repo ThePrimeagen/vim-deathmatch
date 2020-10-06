@@ -24,25 +24,26 @@ function Channel:setCallback(cb)
 end
 
 local function format(data, msgType)
-    local formattedData = string.format(":%s:%s", msgType, data)
-    return tostring(#formattedData) .. formattedData
+    return string.format("%d:%s:%s", #data, msgType, data)
 end
 
-function Channel:send(data, msgType)
+function Channel:send(msgType, msg)
     if self.channelId == nil then
-        log.info("Attempting to send message when channelId is nil", data, msgType)
+        log.info("Attempting to send message when channelId is nil", msg, msgType)
         return
     end
 
-    msgType = msgType or "msg"
-
-    if type(data) == "table" then
-        data = vim.fn.json_encode(data)
+    if not msg then
+        msg = ""
     end
 
-    local dataOut = {format(data, msgType)}
-    log.info("Channel:send", dataOut)
-    vim.fn.chansend(self.channelId, dataOut)
+    if type(msg) == "table" then
+        msg = vim.fn.json_encode(msg)
+    end
+
+    local msgOut = format(msg, msgType)
+    log.info("Channel:send", msgOut)
+    vim.fn.chansend(self.channelId, {msgOut})
 end
 
 function Channel:onMessage(channelId, data, messageType)

@@ -1,10 +1,18 @@
 import { incrementTime, reset } from "./mock-date-now";
 
-import Game, { Difficulty, WinningMessage } from "../game";
+import {
+    READY_COMMAND_TIMEOUT,
+    createGame as cG,
+    Game,
+    Difficulty,
+    WinningMessage
+} from "../game";
+
 import { keyStrokeScore, timeTakenMSScore } from "../score";
 import HandleMsg from "../handle-messages";
 import { createMessage } from "../handle-messages";
 import MockSocket from "./mock-socket";
+import { consoleLogger } from "../logger";
 
 jest.useFakeTimers();
 
@@ -16,9 +24,9 @@ describe("Game", function() {
     beforeEach(() => reset());
 
     function createGame(logEmits: boolean = false): [MockSocket, MockSocket, Game] {
-        const game = new Game(Difficulty.easy, "foo", "bar");
+        const game = cG(Difficulty.easy, "foo", "bar");
         if (logEmits) {
-            consoleLogEmits(game);
+            consoleLogger(game);
         }
 
         const p1 = new MockSocket();
@@ -44,10 +52,6 @@ describe("Game", function() {
     function flushMessages(p1: MockSocket, p2: MockSocket) {
         p1.writes.length = 0;
         p2.writes.length = 0;
-    }
-
-    function consoleLogEmits(game: Game) {
-        game.on("info", console.log);
     }
 
     it("should get two players and send the map down", async function() {
@@ -101,7 +105,7 @@ describe("Game", function() {
 
         flushMessages(p1, p2);
 
-        jest.advanceTimersByTime(30000);
+        jest.advanceTimersByTime(READY_COMMAND_TIMEOUT);
 
         expect(p1.writes.length).toEqual(1);
         expect(p2.writes.length).toEqual(1);
@@ -179,7 +183,7 @@ describe("Game", function() {
         expect(p1.writes.length).toEqual(0);
         expect(p2.writes.length).toEqual(0);
 
-        jest.advanceTimersByTime(30000);
+        jest.advanceTimersByTime(READY_COMMAND_TIMEOUT);
 
         expect(p1.writes.length).toEqual(1);
         expect(p2.writes.length).toEqual(1);
@@ -201,17 +205,18 @@ describe("Game", function() {
         expect(m2.expired).toEqual(true);
     });
 
-    it("Player 1 is not able to sent the ready command.", async function() {
+    it.only("Player 1 is not able to sent the ready command.", async function() {
+        debugger;
 
-        const [ p1, p2 ] = createGame(true);
         const parser = new HandleMsg();
+        const [ p1, p2 ] = createGame(true);
 
         await readyPlayers(p2);
 
         expect(p1.writes.length).toEqual(0);
         expect(p2.writes.length).toEqual(0);
 
-        jest.advanceTimersByTime(30000);
+        jest.advanceTimersByTime(READY_COMMAND_TIMEOUT);
 
         expect(p1.writes.length).toEqual(1);
         expect(p2.writes.length).toEqual(1);
@@ -232,4 +237,21 @@ describe("Game", function() {
         expect(m1.failed).toEqual(true);
         expect(m2.failed).toEqual(false);
     });
+
+    it("Player 1 joins, sends no ready command, and no player 2", async function() {
+        const game = cG(Difficulty.easy, "foo", "bar");
+        const p1 = new MockSocket();
+
+        // @ts-ignore
+        game.addPlayer(p1);
+
+        jest.advanceTimersByTime(READY_COMMAND_TIMEOUT);
+
+        expect(game.isFinished()).toEqual(false);
+        expect(game.hasFailure()).toEqual(true);
+    });
 });
+
+process.on("unhandledRejection", console.log);
+process.on("uncaughtException", console.log);
+

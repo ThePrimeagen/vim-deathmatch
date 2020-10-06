@@ -1,10 +1,13 @@
+import { Logger } from "./logger";
+
 type ParseReturn = [boolean, number, string];
 
 export enum State {
-    WaitingForLength,
-    WaitingForType,
-    WaitingForData,
+    WaitingForLength = "WaitingForLength",
+    WaitingForType = "WaitingForType",
+    WaitingForData = "WaitingForData",
 }
+
 /*
  * The Protocol
    "length:type:<msg of length: l>"
@@ -27,11 +30,17 @@ export default class HandleMsg {
     public msgLength = 0;
     public state: State = State.WaitingForLength;
 
+    private logger: Logger;
+    constructor(gameId: number) {
+       this.logger = new Logger(
+          () => [this.state, this.msgLength, this.msgType], {className: `Game:${gameId}:HandleMsg`});
+    }
+
     parse(data: string): ParsedMessage {
         let completed = false;
         let msg = "";
-
         let currentIdx = 0;
+
         do {
             if (this.state === State.WaitingForLength) {
                 const [
@@ -43,6 +52,7 @@ export default class HandleMsg {
                 currentIdx += consumed;
 
                 if (found) {
+                    this.logger.info("parse", +parsedString);
                     this.msgLength = +parsedString;
                     this.state = State.WaitingForType;
                 }
@@ -58,6 +68,8 @@ export default class HandleMsg {
                 currentIdx += consumed;
 
                 if (found) {
+                    this.logger.info("parse", parsedString);
+
                     this.msgType = parsedString;
                     this.state = State.WaitingForData;
                 }
@@ -73,6 +85,7 @@ export default class HandleMsg {
                 currentIdx += consumed;
 
                 if (found) {
+                    this.logger.info("parse", parsedString);
                     this.state = State.WaitingForLength;
                     msg = parsedString;
                     completed = true;
