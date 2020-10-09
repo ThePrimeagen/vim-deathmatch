@@ -32,6 +32,9 @@ export default class MockSocket {
 
     end() {
         this.ended = true;
+        if (this.callbacks.end) {
+            this.callbacks.end();
+        }
     }
 }
 

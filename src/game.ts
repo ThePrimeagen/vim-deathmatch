@@ -10,8 +10,6 @@ export const START_COMMAND_ACCEPT_TIMEOUT = 5000;
 const START_COMMAND_ACCEPT_MSG = `Was unable to send a start game command.`;
 const GAME_FAILED_TO_START = "The game has failed to start due to the other player";
 
-// ReturnType<typeof setTimeout>
-
 export enum Difficulty {
     easy = "easy",
     medium = "medium",
@@ -40,22 +38,31 @@ class Player {
     public stats: Stats;
     public failureMessage: string | null;
 
-    constructor(conn: net.Socket, public parser: HandleMsg) {
+    private logger: Logger;
+
+    constructor(conn: net.Socket, public parser: HandleMsg, logger?: Logger) {
         this.stats = new Stats();
         this.conn = conn;
         this.failureMessage = null;
+        this.logger = logger && logger.child(() => [], "Player") ||
+            new Logger(() => [], { className: "Player" });
     }
 
     // I like this,
     // but I am not going to do it yet...
-    send(type: string, message: string | object): Promise<void> {
+    send(typeOrMsg: string, message?: string | object): Promise<void> {
+        const messageId = getNewId();
+        const msg = message ? createMessage(typeOrMsg, message) : typeOrMsg;
+
+        this.logger.info("send", messageId, msg);
+
         return new Promise((res, rej) => {
-            const msg = createMessage(type, message);
             if (this.conn.destroyed) {
                 return;
             }
 
             this.conn.write(msg, (e) => {
+                this.logger.info("send#response", e);
                 if (e) {
                     rej(e);
                     return;
@@ -81,15 +88,14 @@ class Player {
 
 type Callback = (...args: any) => void;
 
-let _gameId = 0;
-
 export class Game {
+    public gameId: number;
+    public logger: Logger;
+
     private p1: Player;
     private p2: Player;
     private timerId: ReturnType<typeof setTimeout>;
     private callbacks: {[key: string]: Callback[]};
-    private gameId: number;
-    private logger: Logger;
 
     constructor(private difficulty: Difficulty,
                 private startText: string,
@@ -117,13 +123,8 @@ export class Game {
         return 30000;
     }
 
-    private emit(type: string, fromFunction: string, ...args: any): void {
-        const cbs = this.callbacks[type];
-        if (cbs) {
-            cbs.forEach(cb => {
-                cb(this.gameId, "Game", fromFunction, ...args);
-            });
-        }
+    getInfo(): string {
+        return `Game ${this.gameId}`;
     }
 
     public needsPlayers(): boolean {
@@ -132,7 +133,7 @@ export class Game {
     }
 
     public addPlayer(p: net.Socket) {
-        const player = new Player(p, new HandleMsg(this.gameId));
+        const player = new Player(p, new HandleMsg(this.logger), this.logger);
 
         let whichPlayer = 1;
         if (!this.p1) {
@@ -149,7 +150,6 @@ export class Game {
             player, READY_COMMAND_TIMEOUT, NO_READY_COMMAND_MSG);
 
         p.on("data", (d) => {
-            console.log("DATA", d);
             const {
                 completed,
                 type,
@@ -239,12 +239,38 @@ export class Game {
         }, time);
     }
 
+    private async sendWaitingForFinish(player: Player) {
+        await player.send("waiting", {
+            msg: [
+                "",
+                "",
+                " Waiting for other player to finish...",
+                "",
+                "",
+            ]
+        });
+    }
+
+    private async sendWaitingForPlayer(player: Player) {
+        await player.send("waiting", {
+            msg: [
+                "",
+                "",
+                " Waiting for other player to connect...",
+                "",
+                "",
+            ]
+        });
+    }
+
     private async processMessage(player: Player, type: string, msg: string) {
         this.logger.info("processMessage", player.id, type, msg);
+
         if (type === "ready") {
             player.ready = true;
             this.cancelPlayerFailure(player);
             this.startGame();
+            await this.sendWaitingForPlayer(player);
             return;
         }
 
@@ -264,13 +290,13 @@ export class Game {
                 this.logger.info("processMessage#finished -- calculateScore", gameEnded, stats);
 
                 if (!gameEnded) {
-                    await player.send("waiting", "Waiting for other player to finish...");
+                    await this.sendWaitingForFinish(player);
                 }
             }
         }
     }
 
-    private startGame() {
+    private async startGame() {
         this.logger.info("startGame");
 
         if (!this.p1.ready || !this.p2 || !this.p2.ready) {
@@ -287,34 +313,40 @@ export class Game {
         this.setPlayerFailureTime(
             this.p1, START_COMMAND_ACCEPT_TIMEOUT, START_COMMAND_ACCEPT_MSG);
 
-        this.p1.conn.write(msg, (e?: Error) => {
-            this.logger.info("startGame#p1#startGameMessageCallback", e);
-            if (e || this.p1.failed) {
-                // TODO: Handle this?
-                return;
-            }
+        const p1P = this.p1.send(msg).then(() => {
+            this.logger.info("startGame#p1#startGameMessageCallback");
 
             this.cancelPlayerFailure(this.p1);
             this.p1.started = true;
             this.p1.stats.start();
             this.setTimeout();
+        }).
+        catch(e => {
+            this.logger.info("startGame#p1#startGameMessageCallback ERROR", e);
+            if (e || this.p1.failed) {
+                // TODO: Handle this?
+                return;
+            }
         });
 
         this.setPlayerFailureTime(
             this.p2, START_COMMAND_ACCEPT_TIMEOUT, START_COMMAND_ACCEPT_MSG);
 
-        this.p2.conn.write(msg, (e?: Error) => {
-            this.logger.info("startGame#p2#startGameMessageCallback", e);
-            if (e || this.p2.failed) {
-                // TODO: Handle this?
-                return;
-            }
-
+        const p2P = this.p2.send(msg).then(() => {
+            this.logger.info("startGame#p2#startGameMessageCallback");
             this.cancelPlayerFailure(this.p2);
             this.p2.started = true;
             this.p2.stats.start();
             this.setTimeout();
+        }).catch(e => {
+            this.logger.info("startGame#p2#startGameMessageCallback ERROR", e);
+            if (e || this.p2.failed) {
+                // TODO: Handle this?
+                return;
+            }
         });
+
+        await Promise.all([p1P, p2P]);
     }
 
     private async sendFatalMessage(player: Player): Promise<void> {
@@ -348,14 +380,14 @@ export class Game {
         await Promise.all(msgs);
     }
 
-    private async sendAndDisconnect(player: Player, message: string | object) {
-        const msg = typeof message === "object" ?
-            JSON.stringify(message) : message;
+    private async sendAndDisconnect(player: Player, message: string) {
 
-        player.conn.write(msg, (e) => {
-            this.logger.info("endGame", message, e);
+        player.send(message).then(() => {
+            this.logger.info("endGame");
             player.disconnected = true;
             player.conn.end();
+        }).catch(e => {
+            this.logger.info("endGame#error", e);
         });
     }
 
@@ -376,13 +408,21 @@ export class Game {
         return false;
     }
 
+    public hasDisconnection() {
+        const p1 = this.p1;
+        const p2 = this.p2;
+
+        return p1 && p1.disconnected ||
+            p2 && p2.disconnected;
+    }
+
     public isFinished(): boolean {
         const p1 = this.p1;
         const p2 = this.p2;
 
         this.logger.info("isFinished");
-        return p1 && (p1.finished || p1.timedout) &&
-            p2 && (p2.finished || p2.timedout)
+        return p1 && (p1.finished || p1.timedout || p1.disconnected) &&
+            p2 && (p2.finished || p2.timedout || p2.disconnected);
     }
 
     private async endGame(force: boolean = false): Promise<boolean> {

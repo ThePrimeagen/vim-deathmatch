@@ -20,7 +20,10 @@ function Channel:new()
 end
 
 function Channel:setCallback(cb)
-    self.callback = cb
+    self.callback = function(...)
+        log.info("Channel:setCallback", ...)
+        cb(...)
+    end
 end
 
 local function format(data, msgType)

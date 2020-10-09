@@ -12,7 +12,7 @@ import { keyStrokeScore, timeTakenMSScore } from "../score";
 import HandleMsg from "../handle-messages";
 import { createMessage } from "../handle-messages";
 import MockSocket from "./mock-socket";
-import { consoleLogger } from "../logger";
+import { Logger } from "../logger";
 
 jest.useFakeTimers();
 
@@ -25,9 +25,11 @@ describe("Game", function() {
 
     function createGame(logEmits: boolean = false): [MockSocket, MockSocket, Game] {
         const game = cG(Difficulty.easy, "foo", "bar");
+        /*
         if (logEmits) {
             consoleLogger(game);
         }
+        */
 
         const p1 = new MockSocket();
         const p2 = new MockSocket();
@@ -83,8 +85,8 @@ describe("Game", function() {
 
     it("When one player finishes, the other player should be forced quit in a specific amount of time.", async function() {
 
-        const [ p1, p2 ] = createGame(true);
-        const parser = new HandleMsg();
+        const [ p1, p2, g] = createGame(true);
+        const parser = new HandleMsg(g.logger);
 
         await readyPlayers(p1, p2);
         flushMessages(p1, p2);
@@ -130,8 +132,8 @@ describe("Game", function() {
 
     it("Both players will finish, p2 should win due to strokes", async function() {
 
-        const [ p1, p2 ] = createGame(true);
-        const parser = new HandleMsg();
+        const [ p1, p2, g] = createGame(true);
+        const parser = new HandleMsg(g.logger);
 
         await readyPlayers(p1, p2);
         flushMessages(p1, p2);
@@ -174,8 +176,8 @@ describe("Game", function() {
 
     it("Both players do nothing, blue balls situation.", async function() {
 
-        const [ p1, p2 ] = createGame(true);
-        const parser = new HandleMsg();
+        const [ p1, p2, g ] = createGame(true);
+        const parser = new HandleMsg(g.logger);
 
         await readyPlayers(p1, p2);
         flushMessages(p1, p2);
@@ -205,11 +207,10 @@ describe("Game", function() {
         expect(m2.expired).toEqual(true);
     });
 
-    it.only("Player 1 is not able to sent the ready command.", async function() {
-        debugger;
+    it("Player 1 is not able to sent the ready command.", async function() {
 
-        const parser = new HandleMsg();
-        const [ p1, p2 ] = createGame(true);
+        const [ p1, p2, g] = createGame(true);
+        const parser = new HandleMsg(g.logger);
 
         await readyPlayers(p2);
 
@@ -249,6 +250,18 @@ describe("Game", function() {
 
         expect(game.isFinished()).toEqual(false);
         expect(game.hasFailure()).toEqual(true);
+    });
+
+    it("Player 1 joins, then disconnects, game is over.", async function() {
+        const game = cG(Difficulty.easy, "foo", "bar");
+        const p1 = new MockSocket();
+
+        // @ts-ignore
+        game.addPlayer(p1);
+
+        p1.end();
+
+        expect(game.hasDisconnection()).toEqual(true);
     });
 });
 

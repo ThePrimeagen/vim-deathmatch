@@ -31,9 +31,10 @@ export default class HandleMsg {
     public state: State = State.WaitingForLength;
 
     private logger: Logger;
-    constructor(gameId: number) {
-       this.logger = new Logger(
-          () => [this.state, this.msgLength, this.msgType], {className: `Game:${gameId}:HandleMsg`});
+    constructor(logger?: Logger) {
+        const getState = () => [this.state, this.msgLength, this.msgType];
+        this.logger = logger && logger.child(getState, "HandleMsg") ||
+           new Logger(getState, {className: "HandleMsg"});
     }
 
     parse(data: string): ParsedMessage {

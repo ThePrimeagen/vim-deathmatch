@@ -52,6 +52,12 @@ export class Logger {
         }
     }
 
+    child(state: GetStateFn, className: string) {
+        return new Logger(state, {
+            className: `${this.config.className}:${this.config.id}:${className}`
+        });
+    }
+
     info(functionName: string, ...args: any[]) {
         const state: any[] = this.state();
 

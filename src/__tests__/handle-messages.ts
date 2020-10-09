@@ -2,7 +2,7 @@ import HandleMsg, {State} from "../handle-messages";
 
 describe("HandleMsg", function() {
     it("parse out an empty message", function() {
-        const handle = new HandleMsg();
+        const handle = new HandleMsg(null);
 
         expect(handle.state).toEqual(State.WaitingForLength);
         handle.parse(`0:ready`);
@@ -20,7 +20,7 @@ describe("HandleMsg", function() {
     });
 
     it("parse out the length, type, and message correctly", function() {
-        const handle = new HandleMsg();
+        const handle = new HandleMsg(null);
         const msg = JSON.stringify({foo: "bar"});
 
         expect(handle.state).toEqual(State.WaitingForLength);

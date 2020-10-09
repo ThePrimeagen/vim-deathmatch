@@ -34,8 +34,8 @@ function Game:start()
     self.channel:send("ready")
 
     self.state = states.waitingToStart
-    self:_writeBuffer(self.bufh[1], "Waiting for player....")
-    self:_writeBuffer(self.bufh[2], "Waiting for player....")
+    self:_writeBuffer(self.bufh[1], "Waiting for server response...")
+    self:_writeBuffer(self.bufh[2], "Waiting for server response...")
 end
 
 function Game:isWindowId(winId)
@@ -55,12 +55,21 @@ function Game:_onMessage(msgType, data)
 
     local msg = vim.fn.json_decode(data)
 
-    if msgType == "gameStart" then
+    log.info("Game:_onMessage", msgType, data)
+    if msgType == "waiting" then
         self:_clearBuffer(self.bufh[1])
         self:_clearBuffer(self.bufh[2])
 
-        self:_writeBuffer(self.bufh[1], msg.startingText)
+        self:_writeBuffer(self.bufh[1], msg.msg)
+        self:_writeBuffer(self.bufh[2], msg.msg)
+
+    elseif msgType == "start-game" then
+        self:_clearBuffer(self.bufh[1])
+        self:_clearBuffer(self.bufh[2])
+
+        self:_writeBuffer(self.bufh[1], msg.startText)
         self:_writeBuffer(self.bufh[2], msg.goalText)
+
     elseif msgType == "finished" then
         self:_clearBuffer(self.bufh[1])
         self:_clearBuffer(self.bufh[2])
@@ -112,17 +121,15 @@ function Game:_createOrResizeWindow()
                 false, vim.tbl_extend("force", config, rcConfig2)),
         }
         log.info("Game:_createOrResizeWindow: new windows", vim.inspect(self.winId))
-
     else
         vim.api.nvim_win_set_config(
             self.bufh[1], vim.tbl_extend("force", config, rcConfig1))
         vim.api.nvim_win_set_config(
             self.bufh[2], vim.tbl_extend("force", config, rcConfig2))
-
     end
 end
 
-function Game:_writeBuffer(bufh)
+function Game:_writeBuffer(bufh, msg)
     start = start or 1
     if not self.bufh then
         return
@@ -132,11 +139,21 @@ function Game:_writeBuffer(bufh)
         msg = {msg}
     end
 
-    vim.api.nvim_buf_set_lines(bufh, start, #msg + start, true, msg)
+    vim.api.nvim_buf_set_lines(bufh, start, #msg + start, false, msg)
+end
+
+local function createEmpty(count)
+    local lines = {}
+    for idx = 1, count, 1 do
+        lines[idx] = ""
+    end
+
+    return lines
 end
 
 function Game:_clearBuffer(bufh)
-    vim.cmd("%d")
+    emptyLines = createEmpty(vim.api.nvim_buf_line_count(bufh))
+    vim.api.nvim_buf_set_lines(bufh, 1, #emptyLines, false, emptyLines)
 end
 
 return Game
