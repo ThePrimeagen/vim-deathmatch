@@ -8,6 +8,7 @@
 
 -- User configuration section
 local default_config = {
+
     should_inspect = false,
 
     -- Name of the plugin. Prepended to log messages
@@ -41,7 +42,7 @@ local default_config = {
 }
 
 -- {{{ NO NEED TO CHANGE
-local log = {}
+local log = { }
 
 local unpack = unpack or table.unpack
 
@@ -125,8 +126,8 @@ log.new = function(config, standalone)
         -- Output to log file
         if config.use_file then
             local fp = io.open(outfile, "a")
-            local str = string.format("[%-6s%s] %s: %s\n",
-                nameupper, os.date(), lineinfo, msg)
+            local str = string.format("%d [%-6s%s] %s: %s\n",
+                vim.g["vim_deathmatch_id"] or 1, nameupper, os.date(), lineinfo, msg)
             fp:write(str)
             fp:close()
         end

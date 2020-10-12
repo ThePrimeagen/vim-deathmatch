@@ -45,7 +45,7 @@ class Player {
         this.conn = conn;
         this.failureMessage = null;
         this.logger = logger && logger.child(() => [], "Player") ||
-            new Logger(() => [], { className: "Player" });
+            new Logger(() => [this.id], { className: "Player" });
     }
 
     // I like this,
@@ -269,8 +269,9 @@ export class Game {
         if (type === "ready") {
             player.ready = true;
             this.cancelPlayerFailure(player);
-            this.startGame();
-            await this.sendWaitingForPlayer(player);
+            if (!(await this.startGame())) {
+                await this.sendWaitingForPlayer(player);
+            }
             return;
         }
 
@@ -296,11 +297,11 @@ export class Game {
         }
     }
 
-    private async startGame() {
+    private async startGame(): Promise<boolean> {
         this.logger.info("startGame");
 
         if (!this.p1.ready || !this.p2 || !this.p2.ready) {
-            return;
+            return false;
         }
 
         const msg = createMessage("start-game", {
@@ -347,6 +348,7 @@ export class Game {
         });
 
         await Promise.all([p1P, p2P]);
+        return true;
     }
 
     private async sendFatalMessage(player: Player): Promise<void> {
