@@ -29,9 +29,6 @@ And await the greatest editing experience of your life.
       seconds, but your opponent became a yellow belly coward, therefore, you
       should be no seconds slower
 
-- Generate some puzzles
-    - thoughts?
-
 - Erect the server.
     - Go for docker?
 

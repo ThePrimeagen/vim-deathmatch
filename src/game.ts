@@ -111,6 +111,7 @@ export class Game {
     private p2: Player;
     private timerId: ReturnType<typeof setTimeout>;
     private callbacks: {[key: string]: Callback[]};
+    private gameHasEnded: boolean = false;
 
     constructor(private difficulty: Difficulty,
                 private startText: string[],
@@ -206,9 +207,7 @@ export class Game {
         }
 
         player.disconnected = true;
-        if (!player.finished) {
-            await this.endGame(true);
-        }
+        await this.endGame(true);
     }
 
     private timeoutPlayer(player: Player) {
@@ -437,8 +436,8 @@ export class Game {
         const p2 = this.p2;
 
         this.logger.info("isFinished");
-        return p1 && (p1.finished || p1.timedout || p1.disconnected) &&
-            p2 && (p2.finished || p2.timedout || p2.disconnected);
+        return p1 && (p1.finished || p1.timedout) &&
+            p2 && (p2.finished || p2.timedout);
     }
 
     private addStatsMessaging(msg: WinningMessage, out: string[]) {
@@ -448,14 +447,21 @@ export class Game {
 
         out.push("");
         out.push(`you ${msg.winner ? "won" : "lost"} by ${Math.abs(msg.scoreDifference)} points.`);
-        if (msg.keysPressedDifference === 0) {
-            out.push(`you have pressed the same amount keys.`);
+        if (this.hasDisconnection()) {
+            out.push(`Your enemy has cowardly disconnected. Much praise to you and your prowess`);
         }
+
         else {
-            // TODO: this really pisses me off
-            out.push(`You have pressed ${Math.abs(msg.keysPressedDifference)} ${msg.keysPressedDifference > 0 ? "more" : "less"} keys than your enemy.`);
+            if (msg.keysPressedDifference === 0) {
+                out.push(`you have pressed the same amount keys.`);
+            }
+            else {
+                // TODO: this really pisses me off
+                out.push(`You have pressed ${Math.abs(msg.keysPressedDifference)} ${msg.keysPressedDifference > 0 ? "more" : "less"} keys than your enemy.`);
+            }
+            out.push(`you were ${msg.timeDifference > 0 ? "faster" : "slower"} by ${Math.abs(msg.timeDifference)} milliseconds.`);
         }
-        out.push(`you were ${msg.timeDifference > 0 ? "faster" : "slower"} by ${Math.abs(msg.timeDifference)} milliseconds.`);
+
     }
 
     private displayEndGameMessage(msg: WinningMessage): DisplayMessage {
@@ -483,18 +489,39 @@ export class Game {
         };
     }
 
+    private getWinner(): Player | null {
+        const p1 = this.p1;
+        const p2 = this.p2;
+
+        if (this.hasDisconnection()) {
+            if (p1 && p1.disconnected) {
+                return p2;
+            }
+            return p1;
+        }
+
+        if (!p2) {
+            return null;
+        }
+
+        return this.p1.stats.score > this.p2.stats.score ? this.p1 : this.p2;
+    }
+
     private async endGame(force: boolean = false): Promise<boolean> {
-        // TODO: What if they disconnect, don't forget the messaging
+        if (this.gameHasEnded) {
+            return;
+        }
 
         this.logger.info("endGame",
                   force, this.isFinished());
 
         if (this.hasFailure()) {
             this.fatalEnding();
+            this.gameHasEnded = true;
             return true;
         }
 
-        if (!this.isFinished()) {
+        if (!this.isFinished() && !this.hasDisconnection()) {
             return false;
         }
 
@@ -503,27 +530,33 @@ export class Game {
             clearTimeout(this.timerId);
         }
 
+        const winner = this.getWinner();
+        if (winner === null) {
+            this.gameHasEnded = true;
+            return true;
+        }
+
         if (this.p1.timedout && this.p2.timedout) {
             this.logger.info("endGame#timedout");
-            const msg = createMessage("finished", {
+
+            const msg = createMessage("finished", this.displayEndGameMessage({
                 winner: false,
                 expired: true,
+                failed: false,
                 scoreDifference: 0,
                 keysPressedDifference: 0,
                 timeDifference: 0
-            });
+            }));
 
             this.sendAndDisconnect(this.p1, msg);
             this.sendAndDisconnect(this.p2, msg);
-            return;
+            this.gameHasEnded = true;
+            return true;
         }
 
-        const winner =
-            this.p1.stats.score > this.p2.stats.score ? this.p1 : this.p2;
         const loser = this.otherPlayer(winner);
 
         this.logger.info("endGame Winner and Loser", winner.id, loser.id);
-
         const score: WinningMessage = {
             failed: false,
             winner: true,
@@ -548,6 +581,7 @@ export class Game {
         this.sendAndDisconnect(winner, winnerMessage);
         this.sendAndDisconnect(loser, losersMessage);
 
+        this.gameHasEnded = true;
         return true;
     }
 }

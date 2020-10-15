@@ -113,17 +113,17 @@ function Game:on_buffer_update(id, ...)
     end
 
     local lineCount = vim.api.nvim_buf_line_count(id)
-    log.info("Game:on_buffer_update lineCount", lineCount)
     local gameText = tokenize(
         vim.api.nvim_buf_get_lines(id, 0, lineCount, false))
 
-    log.info("Game:on_buffer_update lineCount", vim.inspect(gameText))
-
+    log.info("Game:on_buffer_update lineCount", lineCount, #self.right)
     local idx = 1
     if #gameText ~= #self.right then
         log.info("Game:on_buffer_update#return", #gameText, #self.right)
         return
     end
+    log.info("Game:on_buffer_update gameText", vim.inspect(gameText))
+    log.info("Game:on_buffer_update expectedText", vim.inspect(self.right))
 
     local matched = true
     while matched and idx <= #gameText do
@@ -198,6 +198,7 @@ function Game:_createOrResizeWindow()
         }
         log.info("Game:_createOrResizeWindow: new windows", vim.inspect(self.winId))
     else
+        log.info("Game:_createOrResizeWindow: resizing windows", vim.inspect(rcConfig1))
         vim.api.nvim_win_set_config(
             self.bufh[1], vim.tbl_extend("force", config, rcConfig1))
         vim.api.nvim_win_set_config(
@@ -215,6 +216,8 @@ function Game:_writeBuffer(bufh, msg)
         return
     end
 
+    local editable = self.editable
+    self:_setEditable(true)
     log.info("Game:_writeBuffer", #msg, bufh, msg)
 
     if type(msg) ~= "table" then
@@ -222,6 +225,7 @@ function Game:_writeBuffer(bufh, msg)
     end
 
     vim.api.nvim_buf_set_lines(bufh, 0, #msg - 1, false, msg)
+    self:_setEditable(editable)
 end
 
 local function createEmpty(count)
@@ -234,8 +238,11 @@ local function createEmpty(count)
 end
 
 function Game:_clearBuffer(bufh)
+    local editable = self.editable
+    self:_setEditable(true)
     emptyLines = createEmpty(vim.api.nvim_buf_line_count(bufh))
     vim.api.nvim_buf_set_lines(bufh, 1, #emptyLines, false, emptyLines)
+    self:_setEditable(editable)
 end
 
 return Game
