@@ -23,28 +23,17 @@ And await the greatest editing experience of your life.
 
 ### TODO:
 
-- Finish testing the game. (typescript, theprimeagen)
-- Finish the client (lua, theprimeagen)
-  - including creating uuids for new players
-- The server
-  - create game objects and ensure proper logs
-  - a resiliant server to crashes (may need to restart itself).
-  - Never docker'd, but is this a good idea?
-  - Storing winner / loser data. Should we keep stats?
-    - what level of stats sholud we keep?
-  - Replaying games to ensure that what the user sent up actually represents
-    solving the puzzle. And there is no cheating.
-- Logging Game actions (emit events) (typescript and lua)
-- Replay from logs
-  - Lua player log should be able to play a single player
-  - Server logs should be able to play both players
-  - Should be able to search through logs via uuids (player identifications).
-- Random puzzle generator (typescript).
+#### MVP 1
+- Improve winning / losing messages
+    - disconnects involve some dumb stuff.  It says you have won with X more
+      seconds, but your opponent became a yellow belly coward, therefore, you
+      should be no seconds slower
 
-#### TODO If I really feel like it...
+- Generate some puzzles
+    - thoughts?
 
-- Should we create a website for this?
-  - How do we link players to their uuid?
-  - public uuid vs private? That way a public uuid can show stats and not leak
-    its credentials.
-  - Score board?
+- Erect the server.
+    - Go for docker?
+
+#### Next
+- Replay menu

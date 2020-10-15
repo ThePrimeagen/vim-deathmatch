@@ -10,10 +10,25 @@ export const START_COMMAND_ACCEPT_TIMEOUT = 5000;
 const START_COMMAND_ACCEPT_MSG = `Was unable to send a start game command.`;
 const GAME_FAILED_TO_START = "The game has failed to start due to the other player";
 
+// TODO: I don't care about immutability
+function padMessage(message: string[]): string[] {
+    message.unshift("");
+    message.unshift("");
+    message.push("");
+    message.push("");
+    return message;
+}
+
 export enum Difficulty {
     easy = "easy",
     medium = "medium",
     hard = "hard",
+};
+
+export type DisplayMessage = {
+    left: string[];
+    right?: string[];
+    editable?: boolean;
 };
 
 export type WinningMessage = {
@@ -98,8 +113,8 @@ export class Game {
     private callbacks: {[key: string]: Callback[]};
 
     constructor(private difficulty: Difficulty,
-                private startText: string,
-                private goalText: string) {
+                private startText: string[],
+                private endText: string[]) {
 
         this.callbacks = {};
         this.gameId = getNewId();
@@ -108,7 +123,7 @@ export class Game {
             id: this.gameId,
         });
         this.p1 = this.p2 = null;
-        this.logger.info("GameConstructor", difficulty, startText, goalText);
+        this.logger.info("GameConstructor", difficulty, startText, endText);
     }
 
     toObj() {
@@ -226,7 +241,9 @@ export class Game {
         }
     }
 
-    private setPlayerFailureTime(player: Player, time: number, failureMessage: string) {
+    private setPlayerFailureTime(
+        player: Player, time: number, failureMessage: string) {
+
         this.logger.info("setPlayerFailureTime", player.id, time);
 
         player.timerId = setTimeout(() => {
@@ -241,25 +258,19 @@ export class Game {
 
     private async sendWaitingForFinish(player: Player) {
         await player.send("waiting", {
-            msg: [
-                "",
-                "",
+            left: padMessage([
                 " Waiting for other player to finish...",
-                "",
-                "",
-            ]
+            ]),
+            editable: false
         });
     }
 
     private async sendWaitingForPlayer(player: Player) {
         await player.send("waiting", {
-            msg: [
-                "",
-                "",
+            left: padMessage([
                 " Waiting for other player to connect...",
-                "",
-                "",
-            ]
+            ]),
+            editable: false
         });
     }
 
@@ -305,8 +316,9 @@ export class Game {
         }
 
         const msg = createMessage("start-game", {
-            startText: this.startText,
-            goalText: this.goalText,
+            left: this.startText,
+            right: this.endText,
+            editable: true,
         });
 
         this.logger.info("startGame", msg);
@@ -352,10 +364,12 @@ export class Game {
     }
 
     private async sendFatalMessage(player: Player): Promise<void> {
+        // TODO: Make this into the right format...
         await player.send("finished", {
             failed: player.failed,
             winner: false,
-            msg: player.failed ? player.failureMessage : GAME_FAILED_TO_START
+            left: player.failed ? player.failureMessage : GAME_FAILED_TO_START,
+            editable: false
         });
     }
 
@@ -427,7 +441,50 @@ export class Game {
             p2 && (p2.finished || p2.timedout || p2.disconnected);
     }
 
+    private addStatsMessaging(msg: WinningMessage, out: string[]) {
+        if (msg.expired || msg.failed) {
+            return;
+        }
+
+        out.push("");
+        out.push(`you ${msg.winner ? "won" : "lost"} by ${Math.abs(msg.scoreDifference)} points.`);
+        if (msg.keysPressedDifference === 0) {
+            out.push(`you have pressed the same amount keys.`);
+        }
+        else {
+            // TODO: this really pisses me off
+            out.push(`You have pressed ${Math.abs(msg.keysPressedDifference)} ${msg.keysPressedDifference > 0 ? "more" : "less"} keys than your enemy.`);
+        }
+        out.push(`you were ${msg.timeDifference > 0 ? "faster" : "slower"} by ${Math.abs(msg.timeDifference)} milliseconds.`);
+    }
+
+    private displayEndGameMessage(msg: WinningMessage): DisplayMessage {
+        const out: string[] = [];
+        if (msg.expired) {
+            out[0] = "You were unable to solve the vim puzzle in the allotted";
+            out[1] = "time.  I am sorry that you are not good enough.";
+            out[2] = "Try harder ked.";
+        }
+        else if (msg.failed) {
+            out[0] = "Something has gone terribly wrong. Sorry, about that...";
+        }
+        else if (msg.winner) {
+            out[0] = "  You are the winner!!!";
+        }
+        else if (!msg.winner) {
+            out[0] = "  You are an incredible loser!!!";
+        }
+
+        this.addStatsMessaging(msg, out);
+
+        return {
+            left: padMessage(out),
+            editable: false
+        };
+    }
+
     private async endGame(force: boolean = false): Promise<boolean> {
+        // TODO: What if they disconnect, don't forget the messaging
 
         this.logger.info("endGame",
                   force, this.isFinished());
@@ -477,12 +534,15 @@ export class Game {
             timeDifference: winner.stats.timeTaken - loser.stats.timeTaken
         };
 
-        const winnerMessage = createMessage("finished", score);
-        const losersMessage = createMessage("finished", {
+        const winnerMsg = this.displayEndGameMessage(score);
+        const loserMsg = this.displayEndGameMessage({
             ...score,
             expired: loser.timedout,
             winner: false
         });
+
+        const winnerMessage = createMessage("finished", winnerMsg);
+        const losersMessage = createMessage("finished", loserMsg);
 
         this.logger.info("endGame endingScore", score);
         this.sendAndDisconnect(winner, winnerMessage);
@@ -492,7 +552,7 @@ export class Game {
     }
 }
 
-export function createGame(diff: Difficulty, startText: string, endText: string): Game {
+export function createGame(diff: Difficulty, startText: string[], endText: string[]): Game {
     return new Game(diff, startText, endText);
 }
 

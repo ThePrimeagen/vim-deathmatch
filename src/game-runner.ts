@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import * as net from "net";
 import { createGame, Difficulty, Game } from "./game";
+import generatePuzzle from "./puzzles";
 
 import { Logger } from "./logger";
 
@@ -22,9 +23,9 @@ export default class GameRunner extends EventEmitter {
         if (!this.game || !this.game.needsPlayers() ||
             this.game.isFinished() || this.game.hasDisconnection()) {
 
-            this.game = createGame(Difficulty.easy, "Start Text", "End Text");
+            const puzzle = generatePuzzle();
+            this.game = createGame(Difficulty.easy, puzzle.start, puzzle.end);
         }
-
         this.game.addPlayer(player);
     }
 }

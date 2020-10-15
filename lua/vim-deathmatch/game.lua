@@ -14,8 +14,12 @@ local function getTime()
 end
 
 local function tokenize(str)
+    if type(str) == "table" then
+        str = table.concat(str, "\n")
+    end
+
     local bucket = {}
-    for token in string.gmatch(line, I_AM_SORRY_SOME_CODING_GUY_PLEASE_FORGIVE_ME) do
+    for token in string.gmatch(str, I_AM_SORRY_SOME_CODING_GUY_PLEASE_FORGIVE_ME) do
         table.insert(bucket, token)
     end
 
@@ -30,8 +34,11 @@ function Game:new(channel)
     }
 
     self.__index = self
+
     local game = setmetatable(gameConfig, self)
     game:_createOrResizeWindow()
+    game:_setEditable(true)
+
     return game
 end
 
@@ -45,7 +52,7 @@ function Game:start()
 
     self.state = states.waitingToStart
     self:_writeBuffer(self.bufh[1], "Waiting for server response...")
-    self:_writeBuffer(self.bufh[2], "Waiting for server response...")
+    game:_setEditable(false)
 end
 
 function Game:isWindowId(winId)
@@ -61,40 +68,30 @@ function Game:onWinClose(winId)
 end
 
 function Game:_onMessage(msgType, data)
-    self:_writeBuffer(self.bufh[2], data)
-
     local msg = vim.fn.json_decode(data)
 
     log.info("Game:_onMessage", msgType, data)
+
+    self:_setEditable(true)
+    self:_clearBuffer(self.bufh[1])
+    self:_clearBuffer(self.bufh[2])
+
+    self.left = msg.left
+    self.right = msg.right
+
+    self:_writeBuffer(self.bufh[1], self.left)
+    self:_writeBuffer(self.bufh[2], self.right)
+    self:_setEditable(msg.editable)
+
     if msgType == "waiting" then
-        self:_clearBuffer(self.bufh[1])
-        self:_clearBuffer(self.bufh[2])
-
-        self:_writeBuffer(self.bufh[1], msg.msg)
-        self:_writeBuffer(self.bufh[2], msg.msg)
-
+        self.state = states.waitingToStart
     elseif msgType == "start-game" then
-        self:_clearBuffer(self.bufh[1])
-        self:_clearBuffer(self.bufh[2])
-
-        self:_writeBuffer(self.bufh[1], msg.startText)
-        self:_writeBuffer(self.bufh[2], msg.goalText)
-
         self.state = states.editing
-        self.startText = msg.startText
-        self.goalText = tokenize(msg.goalText)
-
+        self.right = tokenize(self.right)
     elseif msgType == "finished" then
-        self:_clearBuffer(self.bufh[1])
-        self:_clearBuffer(self.bufh[2])
-
-        if msg.failed then
-            print("FAILED")
-            self:_writeBuffer(self.bufh[1], msg.message)
-        else
-            print("NOT FAILED")
-        end
+        self.state = states.waitingForResults
     end
+
 end
 
 function Game:resize()
@@ -106,28 +103,52 @@ function Game:isRunning()
 end
 
 function Game:on_buffer_update(id, ...)
+    log.info("Game:on_buffer_update", id, self.state, not self.editable)
+    if not self.editable then
+        return
+    end
+
     if self.state ~= states.editing then
         return
     end
 
+    local lineCount = vim.api.nvim_buf_line_count(id)
+    log.info("Game:on_buffer_update lineCount", lineCount)
     local gameText = tokenize(
-        vim.api.nvim_buf_get_lines(id, 0, vim.api.nvim_buf_line_count()))
+        vim.api.nvim_buf_get_lines(id, 0, lineCount, false))
+
+    log.info("Game:on_buffer_update lineCount", vim.inspect(gameText))
+
     local idx = 1
-    if #gameText ~= #self.goalText then
+    if #gameText ~= #self.right then
+        log.info("Game:on_buffer_update#return", #gameText, #self.right)
         return
     end
 
     local matched = true
     while matched and idx <= #gameText do
-        matched = matched and gameText[idx] == self.goalText[idx]
+        matched = matched and gameText[idx] == self.right[idx]
+        idx = idx + 1
     end
 
-    log.info("Game:on_buffer_update", matched, gameText)
+    log.info("Game:on_buffer_update", matched, self.keysPressed, "----", gameText)
     if matched then
         local msg = vim.fn.json_encode({
+            undoCount = 0,
+            keys = self.keysPressed
         })
         self.channel:send("finished", msg)
     end
+end
+
+function Game:_setEditable(editable)
+    self.editable = editable
+    if not self.bufh[1] then
+        return
+    end
+
+    vim.api.nvim_buf_set_option(self.bufh[1], "modifiable", editable)
+    vim.api.nvim_buf_set_option(self.bufh[2], "modifiable", editable)
 end
 
 function Game:_createOrResizeWindow()
@@ -152,7 +173,9 @@ function Game:_createOrResizeWindow()
             vim.fn.nvim_create_buf(false, true)}
 
         vim.api.nvim_buf_attach(self.bufh[1], false, {
-            on_lines=function(...) self:on_buffer_update(1, ...) end})
+            on_lines=function(...)
+                self:on_buffer_update(self.bufh[1], ...)
+            end})
 
         self.keysPressed = {}
 
@@ -183,16 +206,22 @@ function Game:_createOrResizeWindow()
 end
 
 function Game:_writeBuffer(bufh, msg)
-    start = start or 1
+
     if not self.bufh then
         return
     end
+
+    if msg == nil then
+        return
+    end
+
+    log.info("Game:_writeBuffer", #msg, bufh, msg)
 
     if type(msg) ~= "table" then
         msg = {msg}
     end
 
-    vim.api.nvim_buf_set_lines(bufh, start, #msg + start, false, msg)
+    vim.api.nvim_buf_set_lines(bufh, 0, #msg - 1, false, msg)
 end
 
 local function createEmpty(count)
