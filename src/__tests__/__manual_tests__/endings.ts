@@ -49,8 +49,103 @@ async function successfulGame2() {
     console.log("P2", p2.writes);
 }
 
+//3. One timeout
+async function singleTimeout() {
+    console.log("single timeout");
+    const [
+        p1,
+        p2,
+    ] = createGame(["foo"], ["bar"], {
+        timeout: {
+            readyTime: 30000,
+            editTime: 500,
+        }
+    });
+
+    await readyPlayers(p1, p2);
+    flushMessages(p1, p2);
+
+    await solveGame(p1, ["f", "b"]);
+    await wait(500);
+
+    console.log("P1", p1.writes);
+    console.log("P2", p2.writes);
+}
+
+//4. Two timeout
+async function doubleTimeout() {
+    console.log("double timeout");
+    const [
+        p1,
+        p2,
+    ] = createGame(["foo"], ["bar"], {
+        timeout: {
+            readyTime: 30000,
+            editTime: 500,
+        }
+    });
+
+    await readyPlayers(p1, p2);
+    flushMessages(p1, p2);
+
+    await wait(500);
+
+    console.log("P1", p1.writes);
+    console.log("P2", p2.writes);
+}
+
+
+//5. one disconnect
+async function oneDisconnect() {
+    console.log("one disconnect");
+    const [
+        p1,
+        p2,
+    ] = createGame(["foo"], ["bar"], {
+        timeout: {
+            readyTime: 30000,
+            editTime: 500,
+        }
+    });
+
+    await readyPlayers(p1, p2);
+    flushMessages(p1, p2);
+
+    p1.end();
+    await wait(500);
+
+    console.log("P1", p1.writes);
+    console.log("P2", p2.writes);
+}
+
+//6. one disconnect
+async function twoDisconnect() {
+    console.log("one disconnect");
+    const [
+        p1,
+        p2,
+    ] = createGame(["foo"], ["bar"], {
+        timeout: {
+            readyTime: 30000,
+            editTime: 500,
+        }
+    });
+
+    await readyPlayers(p1, p2);
+    flushMessages(p1, p2);
+
+    p1.end();
+    p2.end();
+    await wait(500);
+
+    console.log("P1", p1.writes);
+    console.log("P2", p2.writes);
+}
 [
-    //successfulGame,
-    successfulGame2,
+    // successfulGame,
+    // successfulGame2,
+    // singleTimeout,
+    // doubleTimeout,
+    oneDisconnect,
 ].forEach(fn => fn());
 

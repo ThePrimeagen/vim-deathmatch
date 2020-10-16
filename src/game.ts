@@ -25,6 +25,13 @@ export enum Difficulty {
     hard = "hard",
 };
 
+export type GameOptions = {
+    timeout: {
+        readyTime: number;
+        editTime: number;
+    }
+};
+
 export type DisplayMessage = {
     left: string[];
     right?: string[];
@@ -115,7 +122,13 @@ export class Game {
 
     constructor(private difficulty: Difficulty,
                 private startText: string[],
-                private endText: string[]) {
+                private endText: string[],
+                private opts: GameOptions = {
+                    timeout: {
+                        readyTime: 30000,
+                        editTime: 30000
+                    }
+                }) {
 
         this.callbacks = {};
         this.gameId = getNewId();
@@ -136,7 +149,7 @@ export class Game {
     }
 
     getMaximumGameTime() {
-        return 30000;
+        return this.opts.timeout.editTime;
     }
 
     getInfo(): string {
@@ -423,6 +436,14 @@ export class Game {
         return false;
     }
 
+    public hasTimeout() {
+        const p1 = this.p1;
+        const p2 = this.p2;
+
+        return p1 && p1.timedout ||
+            p2 && p2.timedout;
+    }
+
     public hasDisconnection() {
         const p1 = this.p1;
         const p2 = this.p2;
@@ -448,12 +469,18 @@ export class Game {
         console.log("MSG", msg);
 
         out.push("");
-        out.push(`you ${msg.winner ? "won" : "lost"} by ${Math.abs(msg.scoreDifference)} points.`);
+
         if (this.hasDisconnection()) {
             out.push(`Your enemy has cowardly disconnected. Much praise to you and your prowess`);
         }
 
+        else if (this.hasTimeout) {
+            out.push(`Your enemy has no ability to complete the task set before him.`);
+            out.push(`May God have mercy on his soul (timedout)`);
+        }
         else {
+            out.push(`you ${msg.winner ? "won" : "lost"} by ${Math.abs(msg.scoreDifference)} points.`);
+
             if (msg.keysPressedDifference === 0) {
                 out.push(`you have pressed the same amount keys.`);
             }
@@ -591,7 +618,10 @@ export class Game {
     }
 }
 
-export function createGame(diff: Difficulty, startText: string[], endText: string[]): Game {
-    return new Game(diff, startText, endText);
+export function createGame(
+    diff: Difficulty, startText: string[],
+    endText: string[], opts?: GameOptions): Game {
+
+    return new Game(diff, startText, endText, opts);
 }
 

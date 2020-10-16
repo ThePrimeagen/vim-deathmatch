@@ -4,10 +4,14 @@ import {
     createGame as cG,
     Game,
     Difficulty,
+    GameOptions,
 } from "../../game";
 
-export default function createGame(startText: string[] = ["foo"], endText: string[] = ["bar"]): [MockSocket, MockSocket, Game] {
-    const game = cG(Difficulty.easy, startText, endText);
+export default function createGame(
+    startText: string[] = ["foo"], endText: string[] = ["bar"],
+    opts?: GameOptions): [MockSocket, MockSocket, Game] {
+
+    const game = cG(Difficulty.easy, startText, endText, opts);
     /*
        if (logEmits) {
        consoleLogger(game);
