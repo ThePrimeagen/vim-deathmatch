@@ -144,8 +144,8 @@ async function twoDisconnect() {
 [
     // successfulGame,
     // successfulGame2,
-    // singleTimeout,
+    singleTimeout,
     // doubleTimeout,
-    oneDisconnect,
+    // oneDisconnect,
 ].forEach(fn => fn());
 
