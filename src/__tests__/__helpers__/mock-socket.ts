@@ -16,7 +16,6 @@ export default class MockSocket {
     }
 
     write(data: any, cb?: (e?: Error) => void) {
-        console.log("I AM WRITING A WRITE", data);
         if (this.ended) {
             throw new Error("NO CALLING ME");
         }
@@ -25,7 +24,6 @@ export default class MockSocket {
 
         // Probably have to mock this out
         if (cb && (!this.filter || this.filter(data))) {
-            console.log("Calling callback");
             cb();
         }
     }

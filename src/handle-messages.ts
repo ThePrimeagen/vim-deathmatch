@@ -42,6 +42,8 @@ export default class HandleMsg {
         let msg = "";
         let currentIdx = 0;
 
+        console.log(data);
+
         do {
             if (this.state === State.WaitingForLength) {
                 const [

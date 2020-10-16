@@ -445,6 +445,8 @@ export class Game {
             return;
         }
 
+        console.log("MSG", msg);
+
         out.push("");
         out.push(`you ${msg.winner ? "won" : "lost"} by ${Math.abs(msg.scoreDifference)} points.`);
         if (this.hasDisconnection()) {
@@ -459,7 +461,7 @@ export class Game {
                 // TODO: this really pisses me off
                 out.push(`You have pressed ${Math.abs(msg.keysPressedDifference)} ${msg.keysPressedDifference > 0 ? "more" : "less"} keys than your enemy.`);
             }
-            out.push(`you were ${msg.timeDifference > 0 ? "faster" : "slower"} by ${Math.abs(msg.timeDifference)} milliseconds.`);
+            out.push(`you were ${msg.timeDifference < 0 ? "faster" : "slower"} by ${Math.abs(msg.timeDifference)} milliseconds.`);
         }
 
     }
@@ -571,7 +573,10 @@ export class Game {
         const loserMsg = this.displayEndGameMessage({
             ...score,
             expired: loser.timedout,
-            winner: false
+            winner: false,
+            timeDifference: loser.stats.timeTaken - winner.stats.timeTaken,
+            keysPressedDifference: loser.stats.keysPressed.length -
+                winner.stats.keysPressed.length,
         });
 
         const winnerMessage = createMessage("finished", winnerMsg);

@@ -11,7 +11,14 @@ import {
 import { keyStrokeScore, timeTakenMSScore } from "../score";
 import HandleMsg from "../handle-messages";
 import { createMessage } from "../handle-messages";
-import MockSocket from "./mock-socket";
+import MockSocket from "./__helpers__/mock-socket";
+
+import createGame, {
+    writeMessage,
+    readyPlayers,
+    flushMessages,
+} from "./__helpers__/game-utils";
+
 import { Logger } from "../logger";
 
 jest.useFakeTimers();
@@ -22,39 +29,6 @@ beforeEach(function() {
 
 describe("Game", function() {
     beforeEach(() => reset());
-
-    function createGame(logEmits: boolean = false): [MockSocket, MockSocket, Game] {
-        const game = cG(Difficulty.easy, "foo", "bar");
-        /*
-        if (logEmits) {
-            consoleLogger(game);
-        }
-        */
-
-        const p1 = new MockSocket();
-        const p2 = new MockSocket();
-
-        //@ts-ignore
-        game.addPlayer(p1);
-
-        //@ts-ignore
-        game.addPlayer(p2);
-
-        return [p1, p2, game];
-    }
-
-    async function writeMessage(p: MockSocket, type: string, message: string | object) {
-        await p.callbacks["data"](Buffer.from(createMessage(type, message)));
-    }
-
-    async function readyPlayers(...args: MockSocket[]) {
-        await Promise.all(args.map(p => writeMessage(p, "ready", "")));
-    }
-
-    function flushMessages(p1: MockSocket, p2: MockSocket) {
-        p1.writes.length = 0;
-        p2.writes.length = 0;
-    }
 
     it("should get two players and send the map down", async function() {
         const [ p1, p2 ] = createGame();

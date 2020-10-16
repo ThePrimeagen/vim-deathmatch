@@ -49,6 +49,7 @@ export class PlayerStats {
 }
 
 const MAXIMUM_TIME = 30000;
+
 export class Stats {
     public timeTaken: number;
     public score: number = 0;
@@ -62,12 +63,9 @@ export class Stats {
     }
 
     calculateScore(statsFromPlayer: PlayerStats) {
-        console.log("Stats#calculateScore");
-        console.log("stats", statsFromPlayer);
-        console.log("this", this.startTime, this);
-
         this.timeTaken = now() - this.startTime;
         this.keysPressed = statsFromPlayer.keys;
+
         this.score = keyStrokeScore(this.keysPressed) +
             timeTakenMSScore(this.timeTaken);
     }

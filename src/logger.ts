@@ -10,6 +10,8 @@ export type Config = {
     logger?: (...args: any[]) => void;
 };
 
+let globalEnable = true;
+
 function stringify(item: any): string {
     if (item && item.toObj) {
         item = item.toObj();
@@ -37,6 +39,10 @@ export function getNewId(): number {
     return ++id;
 }
 
+export function setEnabledGlobally(enabled: boolean) {
+    globalEnable = enabled;
+}
+
 export class Logger {
     constructor(private state: GetStateFn, private config: Config) {
         if (!this.config.id) {
@@ -59,6 +65,10 @@ export class Logger {
     }
 
     info(functionName: string, ...args: any[]) {
+        if (!globalEnable) {
+            return;
+        }
+
         const state: any[] = this.state();
 
         this.config.logger(
