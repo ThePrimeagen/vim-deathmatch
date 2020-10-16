@@ -141,11 +141,12 @@ async function twoDisconnect() {
     console.log("P1", p1.writes);
     console.log("P2", p2.writes);
 }
+
 [
-    // successfulGame,
-    // successfulGame2,
+    successfulGame,
+    successfulGame2,
     singleTimeout,
-    // doubleTimeout,
-    // oneDisconnect,
+    doubleTimeout,
+    oneDisconnect,
 ].forEach(fn => fn());
 

@@ -23,7 +23,7 @@ const files: Puzzle[] = fs.readdirSync(__dirname).
     }).
     filter(x => x);
 
-console.log("FILES", JSON.stringify(files, null, 4));
+console.log("FILES");
 
 function stripFunction(fn: Function) {
     const functionContents = fn.toString();
