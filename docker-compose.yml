@@ -2,9 +2,7 @@ version: "3.3"
 
 services:
   server:
-    build: .
-    volumes:
-      - .:/src
+    build: ./server
     ports:
       - "42069:42069"
 
