@@ -3,7 +3,6 @@ WORKDIR /src
 COPY . .
 RUN npm install
 EXPOSE 42069
-EXPOSE 42069
 CMD ["npx", "ts-node", "src/server.ts"]
 
 
