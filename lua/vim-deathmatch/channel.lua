@@ -10,6 +10,8 @@ local Channel = {}
 
 function Channel:new()
     self.__index = self
+
+    log.info("I AM HERE")
     local channel = setmetatable({
         idx = 0,
         state = states.waitingForLength,
@@ -51,6 +53,7 @@ end
 
 function Channel:onMessage(channelId, data, messageType)
     log.info("Channel:onMessage", self.channelId, data)
+
     if self.channelId == nil then
         return
     end
@@ -176,8 +179,10 @@ end
 
 function Channel:open(address, callback)
     local self = self
+    log.info("Channel:open ", address)
     local channelId = vim.fn.sockconnect("tcp", address, {
         on_data = function(chanId, data, messageType)
+            log.info("Channel:open#on_data", address, channelId)
             for idx = 1, #data do
                 log.info("Channel:open:on_data", data[idx])
                 self:onMessage(chanId, data[idx], messageType)
@@ -185,6 +190,7 @@ function Channel:open(address, callback)
         end
     })
 
+    log.info("Channel:open#finish", channelId)
     self.channelId = channelId
 end
 

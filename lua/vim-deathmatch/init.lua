@@ -18,7 +18,8 @@ local function start()
         print("Data", data)
     end)
 
-    channel:open("127.0.0.1:42069")
+    channel:open("45.56.120.121:42069")
+
     game = Game:new(channel)
     game:start()
 end
