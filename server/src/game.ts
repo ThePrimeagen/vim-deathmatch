@@ -1,5 +1,6 @@
 import * as net from "net";
 
+import { EventEmitter } from "events";
 import HandleMsg, { createMessage } from "./handle-messages";
 import { PlayerStats, Stats } from "./score";
 import { Logger, getNewId } from "./logger";
@@ -47,7 +48,7 @@ export type WinningMessage = {
     timeDifference: number;
 };
 
-class Player {
+class Player extends EventEmitter {
     public id: number;
     public conn: net.Socket;
     public ready: boolean = false;

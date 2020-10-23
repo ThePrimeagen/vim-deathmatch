@@ -1,9 +1,11 @@
 local log = require("vim-deathmatch.print")
 
 local states = {
+    waitingForConnection = 0,
     waitingForLength = 1,
     waitingForType = 2,
     waitingForData = 3,
+    ended = 4,
 }
 
 local Channel = {}
@@ -14,7 +16,7 @@ function Channel:new()
     log.info("I AM HERE")
     local channel = setmetatable({
         idx = 0,
-        state = states.waitingForLength,
+        state = states.waitingForConnection,
         temporaryContents = nil,
     }, self)
 
@@ -33,8 +35,8 @@ local function format(data, msgType)
 end
 
 function Channel:send(msgType, msg)
-    if self.channelId == nil then
-        log.info("Attempting to send message when channelId is nil", msg, msgType)
+    if self.state == states.waitingForConnection then
+        log.info("Cannot send message until we have a connection!!", msg, msgType)
         return
     end
 
@@ -48,19 +50,9 @@ function Channel:send(msgType, msg)
 
     local msgOut = format(msg, msgType)
     log.info("Channel:send", msgOut)
-    vim.fn.chansend(self.channelId, {msgOut})
+
+    self.client:write(msgOut)
 end
-
-function Channel:onMessage(channelId, data, messageType)
-    log.info("Channel:onMessage", self.channelId, data)
-
-    if self.channelId == nil then
-        return
-    end
-
-    self:processMessage(data)
-end
-
 
 function Channel:store(data)
     if self.temporaryContents then
@@ -170,13 +162,22 @@ function Channel:processMessage(data)
 end
 
 function Channel:onWinClose()
-    if self.channelId == nil then
+    if self.client == nil then
         return
     end
-    vim.fn.chanclose(self.channelId)
-    self.channelId = nil
+
+    local state = self.state
+    self.state = states.ended
+    if state == states.waitingForConnection then
+        return
+    end
+
+    self.client:shutdown()
+    self.client:close()
+    self.client = nil
 end
 
+--[[
 function Channel:open(address, callback)
     local self = self
     log.info("Channel:open ", address)
@@ -192,6 +193,33 @@ function Channel:open(address, callback)
 
     log.info("Channel:open#finish", channelId)
     self.channelId = channelId
+end
+]]
+function Channel:open(host, port, callback)
+    self.client = vim.loop.new_tcp()
+    log.info("XXXX xrander cannot stop me")
+    local count = 0
+    self.client:connect(host, port, function (err)
+        if err ~= nil then
+            return
+        end
+
+        if self.state == states.ended then
+            self:onWinClose()
+            return
+        end
+
+        self.state = states.waitingForLength
+
+        self.client:read_start(vim.schedule_wrap(function(err, chunk)
+            if chunk == nil then
+                self:onWinClose()
+            end
+            self:processMessage(chunk)
+        end))
+
+        callback(err);
+    end)
 end
 
 return Channel

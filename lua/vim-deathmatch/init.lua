@@ -1,5 +1,6 @@
 local Channel = require("vim-deathmatch.channel")
 local Game = require("vim-deathmatch.game")
+local log = require("vim-deathmatch.print")
 
 channel = channel or nil
 game = game or nil
@@ -18,10 +19,15 @@ local function start()
         print("Data", data)
     end)
 
-    channel:open("45.56.120.121:42069")
+    channel:open("45.56.120.121", 42069, vim.schedule_wrap(function(err)
+        if err ~= nil then
+            print("Could not connect to Vim-Deathmatch's Servers.")
+            return
+        end
 
-    game = Game:new(channel)
-    game:start()
+        game = Game:new(channel)
+        game:start()
+    end))
 end
 
 return {
