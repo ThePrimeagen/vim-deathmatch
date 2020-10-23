@@ -107,8 +107,11 @@ function Channel:processMessageToToken(data, idx, token)
 end
 
 function Channel:processMessage(data)
-    local currentIdx = 1
+    if data == nil then
+        return
+    end
 
+    local currentIdx = 1
     while currentIdx <= #data do
         log.info("processMessage:", currentIdx, #data)
 
@@ -177,27 +180,8 @@ function Channel:onWinClose()
     self.client = nil
 end
 
---[[
-function Channel:open(address, callback)
-    local self = self
-    log.info("Channel:open ", address)
-    local channelId = vim.fn.sockconnect("tcp", address, {
-        on_data = function(chanId, data, messageType)
-            log.info("Channel:open#on_data", address, channelId)
-            for idx = 1, #data do
-                log.info("Channel:open:on_data", data[idx])
-                self:onMessage(chanId, data[idx], messageType)
-            end
-        end
-    })
-
-    log.info("Channel:open#finish", channelId)
-    self.channelId = channelId
-end
-]]
 function Channel:open(host, port, callback)
     self.client = vim.loop.new_tcp()
-    log.info("XXXX xrander cannot stop me")
     local count = 0
     self.client:connect(host, port, function (err)
         if err ~= nil then
