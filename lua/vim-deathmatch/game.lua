@@ -182,6 +182,7 @@ function Game:_createOrResizeWindow()
         -- TODO: How to measure undos?
         -- I think they are done in buf attach, we should be able to see the
         -- tick count of the current buffer.
+        local namespace = vim.fn.nvim_create_namespace("vim-deathmatch")
         vim.register_keystroke_callback(function(keyCodePressed)
 
             local strCode = string.byte(keyCodePressed, 1)
@@ -194,9 +195,9 @@ function Game:_createOrResizeWindow()
             end
 
             if self.state == states.ended then
-                assert(false, "please remove the keystroke_callback")
+                vim.register_keystroke_callback(nil, namespace)
             end
-        end, vim.fn.nvim_create_namespace("vim-deathmatch"))
+        end, namespace)
     end
 
     if not self.winId then
