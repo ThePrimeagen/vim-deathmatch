@@ -64,6 +64,7 @@ class Player extends EventEmitter {
     private logger: Logger;
 
     constructor(conn: net.Socket, public parser: HandleMsg, logger?: Logger) {
+        super();
         this.stats = new Stats();
         this.conn = conn;
         this.failureMessage = null;
@@ -80,7 +81,13 @@ class Player extends EventEmitter {
         this.logger.info("send", messageId, msg);
 
         return new Promise((res, rej) => {
-            if (this.conn.destroyed) {
+            if (this.conn.destroyed || this.disconnected) {
+                this.emit("send-failed", {
+                    reason: "Could not send message",
+                    msg,
+                    messageId,
+                    destroyed: this.conn.destroyed,
+                });
                 return;
             }
 
@@ -92,7 +99,7 @@ class Player extends EventEmitter {
                 }
                 res();
             });
-        });
+        })
     }
 
     toObj() {
@@ -194,6 +201,10 @@ export class Game {
 
         p.on("end", () => {
             this.onConnectionEnded(player);
+        });
+
+        player.on("send-failed", msg => {
+            this.logger.info("data#Player_send", player.id, msg);
         });
     }
 
@@ -410,7 +421,6 @@ export class Game {
     }
 
     private async sendAndDisconnect(player: Player, message: string) {
-
         player.send(message).then(() => {
             this.logger.info("endGame");
             player.disconnected = true;
