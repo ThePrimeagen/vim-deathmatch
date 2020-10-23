@@ -6,11 +6,11 @@ module.exports.start = function() {
         "o",
     ];
 
-    const sort_me = [
-        4,
-        5,
-        69,
+    const sort_these_numbers = [
         420,
+        69,
+        5,
+        4,
     ];
 };
 
@@ -22,11 +22,11 @@ module.exports.end = function() {
         "p",
     ];
 
-    const sort_me = [
+    const sort_these_numbers = [
         4,
-        420,
         5,
         69,
+        420,
     ];
 };
 
